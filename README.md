@@ -1,0 +1,2 @@
+# gas-kakeibo-app
+GoogleAppsScriptを用いてCSVデータを読み込み、スプレッドシートに家計簿として自動整理するアプリ
