@@ -1,15 +1,16 @@
 // 対象ファイルID取得関数（ボタンが押されたかどうかで処理を分岐）
 function getFileId(isButtonPressed) {
   // シートの取得
-  let sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  let spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = spreadsheet.getSheetByName(SHEET_THOUBOKANRI);
 
   let targetFileName; // ファイル名を格納する変数
 
-  // ボタンが押された場合、O4とP4セルの日付をそのまま使用
+  // ボタンが押された場合、G15とH15セルの日付をそのまま使用
   if (isButtonPressed) {
     let targetDateget = sheet.getRange('G15').getValue();
 
-    // P4から年を取得してファイル名を作成
+    // G15から年を取得してファイル名を作成
     let targetFileYear = targetDateget;
     targetFileName = `B43支出_${targetFileYear}.csv`;
 

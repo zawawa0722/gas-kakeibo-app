@@ -4,7 +4,8 @@ function extractTargetLine(fileId, imButtonPressed) {
   let targetDate;
   if (imButtonPressed) {
     // yearCell と monthCell の値を取得
-    let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_THOUBOKANRI);
+    let spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let sheet = spreadsheet.getSheetByName(SHEET_THOUBOKANRI);
     let year = sheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
     let month = sheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell).getValue();
     targetDate = `${year}/${String(month).padStart(2, '0')}`;
@@ -81,7 +82,10 @@ function checkSheetsDate(imButtonPressed) {
   // 対象シートをループ処理
   [SHEET_THOUBOKANRI, SHEET_SISYUTUKANRI, SHEET_ONLINE].forEach(sheetName => {
     let sheet = spreadsheet.getSheetByName(sheetName);
-    if (!sheet) return; // シートが存在しない場合はスキップ
+    if (!sheet) {
+      console.warn(`シート "${sheetName}" が見つかりませんでした。`);
+      return; // または throw new Error(...)
+    }
 
     let positions = CELL_POSITIONS[sheetName];
     let dateRange = sheet.getRange(positions.dateRange).getValues()[0]; // 日付行を取得

@@ -2,18 +2,24 @@
 function sendEmailFveDay() {
   // メールを送信
   GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_FIVE_DAY, BODY_FVE_DAY);
-  
+}
+
+function compNotify(buttonFlug, emptyCheckFlug) {
+  // メールを送信
+  if (buttonFlug == false && emptyCheckFlug == true ) {
+    GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_FAILED_IMPORT, BODY_FAILED_IMPORT); 
+  }
 }
 
 function sendEmailTwentySixDay() {
   // メールを送信
   GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_TWENTY_SIX_DAY, REQUEST_BUCK_UP);
-  
 }
 
 // 振込依頼
 function sendFamilyTransferRequest() {
-  let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_THOUBOKANRI);
+  let spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = spreadsheet.getSheetByName(SHEET_THOUBOKANRI);
   let dateRange = CELL_POSITIONS[SHEET_THOUBOKANRI].dateRange;
   let ACCESS_TOKEN = PropertiesService.getScriptProperties().getProperty('LINE_ACCESS_TOKEN');
 

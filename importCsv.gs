@@ -8,6 +8,10 @@ function importCsv(imButtonPressed) {
   let basisCells = checkSheetsDate(imButtonPressed);
   let importCells = [];
 
+  if (!imButtonPressed) {
+    imButtonPressed = false;
+  }
+
   // ループで gotArray の各行をチェック
   for (let i = 0; i < gotArray.length; i++) {
     onlineFlug = false;
@@ -125,10 +129,11 @@ function importCsv(imButtonPressed) {
   });
 
   importCells.forEach(importCell => {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(importCell.sheetName);
+    let spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let sheet = spreadsheet.getSheetByName(importCell.sheetName);
 
     // A列の最下行を取得（空白行を無視して最下行を取得）
-    const data = sheet.getRange("A:A").getValues(); // A列全体を取得
+    let data = sheet.getRange("A:A").getValues(); // A列全体を取得
     let lastRow = 0;
     for (let i = data.length - 1; i >= 0; i--) {
       if (data[i][0] !== "") {
@@ -154,7 +159,7 @@ function importCsv(imButtonPressed) {
     // ① categoryCells の値を使って処理
     for (let row = importCell.row; row < lastRow; row++) {
       // categoryCellの値を取得
-      const categoryValue = sheet.getRange(row, 1).getValue(); 
+      let categoryValue = sheet.getRange(row, 1).getValue(); 
 
       // ② categoryValue がカテゴリに含まれているかチェック
       for (let key in categoryData) {
@@ -178,4 +183,50 @@ function importCsv(imButtonPressed) {
       }
     }
   });
+  // CSVインポートの成否チェック
+  let emptyFlug = checkImportValue(basisCells);
+  // 失敗した場合は通知
+  compNotify(imButtonPressed,emptyFlug);
 }
+
+
+function checkImportValue(basicCells) {
+  let spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let today = new Date();
+  let getlastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  let targetyyyyMM = Utilities.formatDate(getlastMonth, Session.getScriptTimeZone(), "yyyy/MM");
+
+  let checkFlag = true; // ① チェックフラグをtrueに初期化
+
+  // ② basicCells 内の対象シートを処理
+  let targetSheets = [SHEET_SISYUTUKANRI, SHEET_ONLINE];
+  
+  for (let cellInfo of basicCells) {
+    if (!targetSheets.includes(cellInfo.sheetName)) {
+      continue; // 対象外のシートはスキップ
+    }
+
+    let sheet = spreadsheet.getSheetByName(cellInfo.sheetName);
+    if (!sheet) continue;
+
+    let dateRange = sheet.getRange(CELL_POSITIONS[cellInfo.sheetName].dateRange).getValues()[0]; // 1行分取得
+    let targetColumn = dateRange.indexOf(targetyyyyMM); // ③ 一致する列を検索
+
+    if (targetColumn === -1) {
+      checkFlag = false; // ④ 一致する列がない場合、フラグを false に
+      continue;
+    }
+
+    let dataRange = sheet.getRange(4, targetColumn + 2, 22, 1); // ④ 該当列の4~25行目を取得
+    let values = dataRange.getValues();
+
+    for (let row of values) {
+      if (row[0] === null || row[0] === "") { // 値がnullまたは空文字なら
+        checkFlag = false;
+        break;
+      }
+    }
+  }
+  return checkFlag; // ⑤ フラグをリターン
+}
+
