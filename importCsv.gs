@@ -3,13 +3,26 @@ function importCsv(imButtonPressed) {
   let onlineFlug;
   let tempFlug_N;
   let tempFlug_S;
-  let fileId = getFileId(imButtonPressed);
-  let gotArray = extractTargetLine(fileId, imButtonPressed);
-  let basisCells = checkSheetsDate(imButtonPressed);
+  let fileId;
+  let gotArray;
   let importCells = [];
 
-  if (!imButtonPressed) {
+  // トリガー実行の場合はimButtonPressedに何も値が入らないため、falseを入れておく。
+  if (imButtonPressed === undefined || imButtonPressed === null) {
     imButtonPressed = false;
+  }
+
+  // getFileIdのエラー確認
+  try {
+    fileId = getFileId(imButtonPressed);
+  } catch (e) {
+    outputErrorLog(e, imButtonPressed);
+  }
+  // extractTargetLineのエラー確認
+  try {
+    gotArray = extractTargetLine(fileId, imButtonPressed);
+  } catch (e) {
+    outputErrorLog(e, imButtonPressed);
   }
 
   // ループで gotArray の各行をチェック
@@ -196,7 +209,7 @@ function checkImportValue(basicCells) {
   let getlastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   let targetyyyyMM = Utilities.formatDate(getlastMonth, Session.getScriptTimeZone(), "yyyy/MM");
 
-  let checkFlag = true; // ① チェックフラグをtrueに初期化
+  let checkFlag = false; // ① チェックフラグをfalseに初期化
 
   // ② basicCells 内の対象シートを処理
   let targetSheets = [SHEET_SISYUTUKANRI, SHEET_ONLINE];
@@ -213,16 +226,22 @@ function checkImportValue(basicCells) {
     let targetColumn = dateRange.indexOf(targetyyyyMM); // ③ 一致する列を検索
 
     if (targetColumn === -1) {
-      checkFlag = false; // ④ 一致する列がない場合、フラグを false に
+      checkFlag = true; // ④ 一致する列がない場合、フラグを false に
       continue;
     }
 
-    let dataRange = sheet.getRange(4, targetColumn + 2, 22, 1); // ④ 該当列の4~25行目を取得
+    let dataRange;
+    if (sheet.getName().toLowerCase() === SHEET_SISYUTUKANRI.toLowerCase()) {
+      dataRange = sheet.getRange(4, targetColumn + 2, 22, 1);
+    } else if (sheet.getName().toLowerCase() === SHEET_ONLINE.toLowerCase()) {
+      dataRange = sheet.getRange(4, targetColumn + 2, 5, 1);
+    }
+
     let values = dataRange.getValues();
 
     for (let row of values) {
       if (row[0] === null || row[0] === "") { // 値がnullまたは空文字なら
-        checkFlag = false;
+        checkFlag = true;
         break;
       }
     }
