@@ -185,7 +185,7 @@ function importCsv(imButtonPressed) {
   });
   // CSVインポートの成否チェック
   let emptyFlug = checkImportValue(basisCells);
-  // 失敗した場合は通知
+  // インポートの成否通知
   compNotify(imButtonPressed,emptyFlug);
 }
 

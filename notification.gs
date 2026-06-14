@@ -6,8 +6,12 @@ function sendEmailFveDay() {
 
 function compNotify(buttonFlug, emptyCheckFlug) {
   // メールを送信
-  if (buttonFlug == false && emptyCheckFlug == true ) {
-    GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_FAILED_IMPORT, BODY_FAILED_IMPORT); 
+  if (buttonFlug == false){
+    if (emptyCheckFlug != false){
+      GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT);
+    }else{
+      GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_FAILED_IMPORT, BODY_FAILED_IMPORT);
+    }
   }
 }
 
@@ -27,6 +31,7 @@ function sendFamilyTransferRequest() {
   let today = new Date();
   let lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   let lastMonthText = `${lastMonth.getFullYear()}/${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
+  let lastMonthTextNotZero = `${String(lastMonth.getMonth() + 1)}`
 
   // dateRange から先月の列を特定
   let dateValues = sheet.getRange(dateRange).getValues()[0];
@@ -42,17 +47,17 @@ function sendFamilyTransferRequest() {
   let row6Value = sheet.getRange(6, colIndex).getValue(); // 6行目の値
   let row7Value = sheet.getRange(7, colIndex).getValue(); // 7行目の値
 
-  // 項目名を取得 (A4:A12)
-  let labels = sheet.getRange("A4:A12").getValues().map(row => row[0]);
+  // 項目名を取得 (A8:A12)
+  let labels = sheet.getRange("A8:A12").getValues().map(row => row[0]);
 
-  // 4〜12行目の値を取得
-  let values = sheet.getRange(4, lastMonthIndex + 2, 9, 1).getValues();  // 4〜12行目、colIndexを基準に
+  // 8〜12行目の値を取得
+  let values = sheet.getRange(8, lastMonthIndex + 2, 5, 1).getValues();
 
   // 表形式にするため、項目名と値を結びつける
-  let resultTable = "以下が先月の結果です。お疲れさまでした！\n\n";
+  let resultTable = `以下が${lastMonthTextNotZero}月の結果です。\nお疲れ様でした!\n\n`;
   let formattedValues = {}; // 項目名と金額の格納用
 
-  // 4〜12行目の値を整形
+  // 8〜12行目の値を整形
   for (let i = 0; i < labels.length; i++) {
     let label = labels[i];
     let value = values[i][0];
@@ -86,12 +91,16 @@ function sendFamilyTransferRequest() {
     savingsMessage = SAVINGS_MESSAGES.midHigh;
   } else if (savingsRate >= 10) {
     savingsMessage = SAVINGS_MESSAGES.midLow;
-  } else {
+  } else if (savingsRate > 0 && savingsRate < 10) {
     savingsMessage = SAVINGS_MESSAGES.low;
+  } else if (savingsRate <= 0) {
+    savingsMessage = SAVINGS_MESSAGES.death;
+  } else {
+    savingsMessage = SAVINGS_MESSAGES.none;
   }
 
   // メッセージ作成
-  let messageBody = resultTable + `\n\n${savingsMessage}\n\n★今月の振込金額\n直人：${row6Value.toLocaleString()}円\n沙羅：${row7Value.toLocaleString()}円`;
+  let messageBody = resultTable + `\n\n${savingsMessage}\n\n★今月の2人の振込金額\n直人：${row6Value.toLocaleString()}円\n沙羅：${row7Value.toLocaleString()}円`;
 
   let options = {
     "method": "post",
