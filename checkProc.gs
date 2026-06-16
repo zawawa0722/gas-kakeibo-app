@@ -2,19 +2,18 @@ function extractTargetLine(fileId, imButtonPressed) {
   
   // 日付文字列の作成
   let targetDate;
+  let TODAY = new Date();
   if (imButtonPressed) {
     // yearCell と monthCell の値を取得
-    let spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-    let sheet = spreadsheet.getSheetByName(SHEET_THOUBOKANRI);
-    let year = sheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
-    let month = sheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell).getValue();
+    let tyoubosheet = SPREADSHEET.getSheetByName(SHEET_THOUBOKANRI);
+    let year = tyoubosheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
+    let month = tyoubosheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell).getValue();
     targetDate = `${year}/${String(month).padStart(2, '0')}`;
   } else {
     // imButtonPressed が FALSE の場合、先月の日付文字列を作成
-    let now = new Date();
-    now.setMonth(now.getMonth() - 1); // 先月に設定
-    let year = now.getFullYear();
-    let month = now.getMonth() + 1; // 月は0始まりのため+1
+    TODAY.setMonth(TODAY.getMonth() - 1); // 先月に設定
+    let year = TODAY.getFullYear();
+    let month = TODAY.getMonth() + 1; // 月は0始まりのため+1
     targetDate = `${year}/${String(month).padStart(2, '0')}`;
   }
 
@@ -59,29 +58,29 @@ function parseCSVLine(line) {
   });
 }
 
+
+// 
 function checkSheetsDate(imButtonPressed) {
-
-  let result = []; // 結果を格納する配列
-  let today = new Date();
-  let spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-
+   // 結果を格納する配列
+  let result = [];
+  let TODAY = new Date();
   // imButtonPressed に基づいてターゲット日付を作成
   let targetDate;
   if (imButtonPressed) {
     // G15 と H15 から年と月を取得して日付を生成 (帳簿管理を基準)
-    let year = spreadsheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
-    let month = spreadsheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell).getValue();
+    let year = SPREADSHEET.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
+    let month = SPREADSHEET.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell).getValue();
     month = month < 10 ? `0${month}` : month; // 前ゼロを付与
     targetDate = `${year}/${month}`;
   } else {
     // 本日の先月の日付を計算して yyyy/MM 形式で取得
-    let lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    targetDate = Utilities.formatDate(lastMonth, Session.getScriptTimeZone(), "yyyy/MM");
+    let lastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
+    targetDate = Utilities.formatDate(lastMonth, 'Asia/Tokyo', "yyyy/MM");
   }
 
   // 対象シートをループ処理
   [SHEET_THOUBOKANRI, SHEET_SISYUTUKANRI, SHEET_ONLINE].forEach(sheetName => {
-    let sheet = spreadsheet.getSheetByName(sheetName);
+    let sheet = SPREADSHEET.getSheetByName(sheetName);
     if (!sheet) {
       console.warn(`シート "${sheetName}" が見つかりませんでした。`);
       return; // または throw new Error(...)
@@ -105,3 +104,52 @@ function checkSheetsDate(imButtonPressed) {
 
   return result; // 結果を返す
 }
+
+
+// CSVインポートの成否チェック
+function checkImportValue(basicCells) {
+  let TODAY = new Date();
+  let getlastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
+  let targetyyyyMM = Utilities.formatDate(getlastMonth, Session.getScriptTimeZone(), "yyyy/MM");
+
+  let checkFlag = false; // ① チェックフラグをfalseに初期化
+
+  // ② basicCells 内の対象シートを処理
+  let targetSheets = [SHEET_SISYUTUKANRI, SHEET_ONLINE];
+  
+  for (let cellInfo of basicCells) {
+    if (!targetSheets.includes(cellInfo.sheetName)) {
+      continue; // 対象外のシートはスキップ
+    }
+
+    let sheet = SPREADSHEET.getSheetByName(cellInfo.sheetName);
+    if (!sheet) continue;
+
+    let dateRange = sheet.getRange(CELL_POSITIONS[cellInfo.sheetName].dateRange).getValues()[0]; // 1行分取得
+    let targetColumn = dateRange.indexOf(targetyyyyMM); // ③ 一致する列を検索
+
+    if (targetColumn === -1) {
+      checkFlag = true; // ④ 一致する列がない場合、フラグを false に
+      continue;
+    }
+
+    let dataRange;
+    if (sheet.getName().toLowerCase() === SHEET_SISYUTUKANRI.toLowerCase()) {
+      dataRange = sheet.getRange(4, targetColumn + 2, 22, 1);
+    } else if (sheet.getName().toLowerCase() === SHEET_ONLINE.toLowerCase()) {
+      dataRange = sheet.getRange(4, targetColumn + 2, 5, 1);
+    }
+
+    let values = dataRange.getValues();
+
+    for (let row of values) {
+      if (row[0] === null || row[0] === "") { // 値がnullまたは空文字なら
+        checkFlag = true;
+        break;
+      }
+    }
+  }
+  return checkFlag; // ⑤ フラグをリターン
+}
+
+
