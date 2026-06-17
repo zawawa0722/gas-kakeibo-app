@@ -21,6 +21,7 @@ function getSpreadsheet() {
 // 対象ファイルID取得関数（ボタンが押されたかどうかで処理を分岐）
 function getFileId(isButtonPressed) {
   // シートの取得
+  let SPREADSHEET = getSpreadsheet();
   let tyoubosheet = SPREADSHEET.getSheetByName(SHEET_THOUBOKANRI);
   let targetDateget;
   let targetFileName;

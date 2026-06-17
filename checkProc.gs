@@ -3,6 +3,7 @@ function extractTargetLine(fileId, imButtonPressed) {
   // 日付文字列の作成
   let targetDate;
   let TODAY = new Date();
+  let SPREADSHEET = getSpreadsheet();
   if (imButtonPressed) {
     // yearCell と monthCell の値を取得
     let tyoubosheet = SPREADSHEET.getSheetByName(SHEET_THOUBOKANRI);
@@ -66,6 +67,7 @@ function checkSheetsDate(imButtonPressed) {
   let TODAY = new Date();
   // imButtonPressed に基づいてターゲット日付を作成
   let targetDate;
+  let SPREADSHEET = getSpreadsheet();
   if (imButtonPressed) {
     // G15 と H15 から年と月を取得して日付を生成 (帳簿管理を基準)
     let year = SPREADSHEET.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
@@ -109,6 +111,7 @@ function checkSheetsDate(imButtonPressed) {
 // CSVインポートの成否チェック
 function checkImportValue(basicCells) {
   let TODAY = new Date();
+  let SPREADSHEET = getSpreadsheet();
   let getlastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
   let targetyyyyMM = Utilities.formatDate(getlastMonth, Session.getScriptTimeZone(), "yyyy/MM");
 

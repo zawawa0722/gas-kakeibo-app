@@ -1,214 +1,292 @@
 function importCsv(imButtonPressed) {
 
-  let onlineFlug;
-  let tempFlug_N;
-  let tempFlug_S;
-  let fileId;
-  let gotArray;
-  let importCells = [];
-  
-  // トリガー実行の場合はimButtonPressedに何も値が入らないため、falseを入れておく。
-  if (imButtonPressed === undefined || imButtonPressed === null) {
+  // トリガ実行の場合はボタン実行フラグをオフにしておく
+  if (typeof imButtonPressed !== "boolean") {
     imButtonPressed = false;
   }
 
+  let SPREADSHEET, fileId, gotArray, basisCells;
+
   // スプレッドシート取得
   try {
+    outputLog("INFO", "getSpreadsheet 開始", imButtonPressed);
     SPREADSHEET = getSpreadsheet();
+    outputLog("INFO", "getSpreadsheet 成功", imButtonPressed);
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "getSpreadsheet 失敗: " + e.stack, imButtonPressed);
+    throw e;
   }
-  // 対象のCSVファイルを特定
+
+  // 取り込み対象のCSVファイルを取得
   try {
+    outputLog("INFO", "getFileId 開始", imButtonPressed);
     fileId = getFileId(imButtonPressed);
+    outputLog("INFO", "getFileId 成功", imButtonPressed);
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "getFileId 失敗: " + e.stack, imButtonPressed);
+    throw e;
   }
-  // extractTargetLineのエラー確認
+
+  // CSVファイルから今月分の明細を取得
   try {
+    outputLog("INFO", "extractTargetLine 開始", imButtonPressed);
     gotArray = extractTargetLine(fileId, imButtonPressed);
+    outputLog("INFO", "extractTargetLine 成功: " + gotArray.length + "件", imButtonPressed);
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "extractTargetLine 失敗: " + e.stack, imButtonPressed);
+    throw e;
   }
-  // basisCellsのエラー確認
+
+  // 対象のシート内から、出力対象となるセルを特定
   try {
+    outputLog("INFO", "checkSheetsDate 開始", imButtonPressed);
     basisCells = checkSheetsDate(imButtonPressed);
+    if (!basisCells) throw new Error("basisCells が undefined");
+    outputLog("INFO", "checkSheetsDate 成功: " + basisCells.length + "件", imButtonPressed);
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "checkSheetsDate 失敗: " + e.stack, imButtonPressed);
+    throw e;
   }
 
-  // ループで gotArray の各行をチェック
-  for (let i = 0; i < gotArray.length; i++) {
-    onlineFlug = false;
-    tempFlug_N = false;
-    tempFlug_S = false;
-    let isMatched = false; // マッチングフラグ
+  // gotArrayに格納した今月分の明細を、basisCellsで取得したセルに出力する
+  try {
+    outputLog("INFO", "取引データ処理開始", imButtonPressed);
 
-    // オンラインフラグのロジック:
-    if (
-      (gotArray[i][7] === CARD_CATEGORY.RAKUTEN_CARD ||
-        gotArray[i][7] === CARD_CATEGORY.AMAZON) &&
-      gotArray[i][5] === EXPEND_CATEGORY.SHOPPING
-    ) {
-      onlineFlug = true;
-    }
+    for (let i = 0; i < gotArray.length; i++) {
+      let onlineFlug = false;
+      let tempFlug_N = false;
+      let tempFlug_S = false;
+      let isMatched = false;
 
-    // メモに "直人一時負担" または "沙羅一時負担" の記載があった場合は一時負担取引とする
-    if (gotArray[i][3] === EXPEND_CATEGORY.TEMP_N) {
-      tempFlug_N = true;
-      isMatched = true;
-    } else if (gotArray[i][3] === EXPEND_CATEGORY.TEMP_S) {
-      tempFlug_S = true;
-      isMatched = true;
-    }
-
-    // オンラインフラグが立っている場合
-    if (onlineFlug) {
-      // ONLINE_CATEGORY の値に部分一致する場合は対応する変数に加算
-      for (const [key, value] of Object.entries(ONLINE_CATEGORY)) {
-        // RAKUTENの値が「楽天」または「ﾗｸﾃﾝｲﾁﾊﾞ」に一致するか確認
-        if (Array.isArray(value) ? value.some(v => gotArray[i][1].includes(v)) : gotArray[i][1].includes(value)) {
-          let onlineKey = ONLINE_MAP[key];
-          if (onlineKey) {
-            if (!isNaN(gotArray[i][4])) {
-              let positiveValue = Math.abs(Number(gotArray[i][4])); // 正の整数に変換
-              // CANCEL が含まれている場合は減算、それ以外の場合は加算
-              if (gotArray[i][3].includes(CANCEL)) {
-                  calculateOnline[onlineKey] -= positiveValue;  // 減算
-              } else {
-                  calculateOnline[onlineKey] += positiveValue;  // 加算
-              }
-              isMatched = true; // マッチング成功
-            }
-          }
-          break;
-        }
+      // 支出に含まれない明細はスキップする
+      if (gotArray[i][COL_VALID] === 0) {
+        continue;
       }
-    } else {
-      // EXPEND_CATEGORY の値に部分一致する場合は対応する変数に加算
-      for (const [key, value] of Object.entries(EXPEND_CATEGORY)) {
-        if (gotArray[i][5] == value) {
-          let expendKey = EXPEND_MAP[key];
-          if (expendKey) {
-            if (!isNaN(gotArray[i][4])) {
-              let positiveValue = Math.abs(Number(gotArray[i][4]));
-              // CANCEL が含まれている場合は減算、それ以外の場合は加算
-              if (gotArray[i][3].includes(CANCEL)) {
-                  calculateExpend[expendKey] -= positiveValue;  // 減算
-              } else {
-                  calculateExpend[expendKey] += positiveValue;  // 加算
-              }
-              isMatched = true; // マッチング成功
-            }
-            if (tempFlug_N) {
-              if (gotArray[i][3].includes(CANCEL)) {
-                  calculateExpend.tempNaoto -= positiveValue;  // 減算
-              } else {
-                  calculateExpend.tempNaoto += positiveValue;  // 加算
-              }
-            }
-            if (tempFlug_S) {
-              if (gotArray[i][3].includes(CANCEL)) {
-                  calculateExpend.tempNaoto -= positiveValue;  // 減算
-              } else {
-                  calculateExpend.tempNaoto += positiveValue;  // 加算
-              }
-            }
-          }
-          break;
-        }
+
+      // 楽天カード・Amazonカードで決済している場合はオンラインフラグを付与
+      if (
+        (gotArray[i][COL_CARD] === CARD_CATEGORY.RAKUTEN_CARD ||
+          gotArray[i][COL_CARD] === CARD_CATEGORY.AMAZON) &&
+        gotArray[i][COL_CATEGORY] === EXPEND_CATEGORY.SHOPPING
+      ) {
+        onlineFlug = true;
       }
+
+      // 一時負担のロジック
+      if (gotArray[i][COL_TYPE] === EXPEND_CATEGORY.TEMP_N) {
+        tempFlug_N = true;
+        isMatched = true;
+      } else if (gotArray[i][COL_TYPE] === EXPEND_CATEGORY.TEMP_S) {
+        tempFlug_S = true;
+        isMatched = true;
+      }
+
+      // 明細の解析と計算
+      if (onlineFlug) {
+        isMatched = onlineTransaction(gotArray[i], calculateOnline);
+      } else {
+        isMatched = expendTransaction(gotArray[i], calculateExpend, tempFlug_N, tempFlug_S);
+      }
+
+      // どのカテゴリともマッチしなかった場合は"その他"カテゴリへ仕分ける
+      isMatched = unmatchedTransaction(
+        gotArray[i],
+        onlineFlug,
+        isMatched,
+        calculateOnline,
+        calculateExpend
+      );
     }
 
-    // オンラインフラグが立っていて部分一致しない場合はOTHER_ONLINEに加算
-    if (onlineFlug && !isMatched) {
-      if (!isNaN(gotArray[i][4])) {
-        let positiveValue = Math.abs(Number(gotArray[i][4]));
-        calculateOnline[ONLINE_MAP.OTHER_ONLINE] += positiveValue; // OTHER_ONLINEに加算
-        isMatched = true; // マッチ済みとする
-      }
-      //console.warn(`警告: オンライン取引の未分類データ - 行 ${i + 1}, 内容: ${JSON.stringify(gotArray[i])}`);
-    }
-
-    // マッチしない場合はOTHER（その他）に加算
-    if (!isMatched) {
-      if (!isNaN(gotArray[i][4])) {
-        let positiveValue = Math.abs(Number(gotArray[i][4]));
-        calculateExpend[EXPEND_MAP.OTHER] += positiveValue; // 雑費に加算
-      }
-      //console.warn(`警告: その他の未分類データ - 行 ${i + 1}, 内容: ${JSON.stringify(gotArray[i])}`);
-    }
+    outputLog("INFO", "取引データ処理終了", imButtonPressed);
+  } catch (e) {
+    outputLog("ERROR", "取引データ処理中に失敗: " + e.stack, imButtonPressed);
+    throw e;
   }
 
-  // basisCellsをループして条件に基づいて処理
-  basisCells.forEach(cell => {
-    // 帳簿管理の場合はスキップ
-    if (cell.sheetName === SHEET_THOUBOKANRI) return;
+  // シートに結果を出力
+  applyBasisCells(SPREADSHEET, basisCells, calculateExpend, calculateOnline, imButtonPressed);
 
-    // importCellsに追加（columnはbasisCellsのものを引き継ぐ）
-    importCells.push({
-      sheetName: cell.sheetName,
-      row: cell.row + 1,
-      column: cell.column  // basisCellsのcolumnを引き継ぐ
-    });
-  });
+  // CSVインポート結果確認
+  try {
+    outputLog("INFO", "checkImportValue 開始", imButtonPressed);
+    let emptyFlug = checkImportValue(basisCells);
+    outputLog("INFO", "checkImportValue 成功", imButtonPressed);
 
-  importCells.forEach(importCell => {
-    let sheet = SPREADSHEET.getSheetByName(importCell.sheetName);
+    // CSVインポート結果通知
+    compNotify(imButtonPressed, emptyFlug);
+    outputLog("INFO", "compNotify 成功", imButtonPressed);
+  } catch (e) {
+    outputLog("ERROR", "checkImportValue / compNotify 失敗: " + e.stack, imButtonPressed);
+    throw e;
+  }
 
-    // A列の最下行を取得（空白行を無視して最下行を取得）
-    let data = sheet.getRange("A:A").getValues(); // A列全体を取得
-    let lastRow = 0;
-    for (let i = data.length - 1; i >= 0; i--) {
-      if (data[i][0] !== "") {
-        lastRow = i + 1;
-        break;
-      }
-    }
-
-    // シート名に基づいてカテゴリを選択
-    let categoryData, mapData;
-    if (sheet.getName() === SHEET_SISYUTUKANRI) {
-      categoryData = EXPEND_CATEGORY;
-      mapData = EXPEND_MAP;  // EXPEND_MAPを使用
-      calculateData = calculateExpend
-    } else if (sheet.getName() === SHEET_ONLINE) {
-      categoryData = ONLINE_MEISAI_CATEGORY;
-      mapData = ONLINE_MAP;  // ONLINE_MAPを使用
-      calculateData = calculateOnline
-    } else {
-      return; // その他のシートは処理をスキップ
-    }
-
-    // ① categoryCells の値を使って処理
-    for (let row = importCell.row; row < lastRow; row++) {
-      // categoryCellの値を取得
-      let categoryValue = sheet.getRange(row, 1).getValue(); 
-
-      // ② categoryValue がカテゴリに含まれているかチェック
-      for (let key in categoryData) {
-        if (categoryValue === categoryData[key]) {
-
-          // ③ mapDataを経由して該当のキーを取得
-          let calculateKey = mapData[key];
-
-          // ④ calculatedataの値を取得
-          let calculatedValue = calculateData[calculateKey];
-
-          // セルの値が空であれば calculatedValue をセット
-          if (!sheet.getRange(row, importCell.column).getValue()) {
-            // importCells に入力
-            sheet.getRange(row, importCell.column).setValue(calculatedValue); 
-          }
-          // 一度マッチしたら次のカテゴリーへ
-          break;
-        }
-      }
-    }
-  });
-  // CSVインポートの成否チェック
-  let emptyFlug = checkImportValue(basisCells);
-  // インポートの成否通知
-  compNotify(imButtonPressed,emptyFlug);
+  outputLog("INFO", "importCsv 全体 正常終了", imButtonPressed);
 }
 
+// オンライン明細の計算ロジック
+function onlineTransaction(row, calculateOnline) {
+  let isMatched = false;
+
+  for (const [key, value] of Object.entries(ONLINE_CATEGORY)) {
+    const isHit = Array.isArray(value)
+      ? value.some(v => row[COL_DESC].includes(v))
+      : row[COL_DESC].includes(value);
+
+    if (isHit) {
+      let onlineKey = ONLINE_MAP[key];
+      if (onlineKey && !isNaN(row[COL_AMOUNT])) {
+        let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
+        if (isCancel(row)) {
+          calculateOnline[onlineKey] -= positiveValue;
+        } else {
+          calculateOnline[onlineKey] += positiveValue;
+        }
+        isMatched = true;
+      }
+      break;
+    }
+  }
+  return isMatched;
+}
+
+// オフライン明細の計算ロジック
+function expendTransaction(row, calculateExpend, tempFlug_N, tempFlug_S) {
+  let isMatched = false;
+
+  for (const [key, value] of Object.entries(EXPEND_CATEGORY)) {
+    if (row[COL_CATEGORY] == value) {
+      // ワンバンクへの入金明細は一旦スキップ
+      if (row[COL_DESC] === NYUUKIN || row[COL_DESC] === WANBANK) {
+        isMatched = true;
+        break;
+      }
+
+      let expendKey = EXPEND_MAP[key];
+      if (expendKey && !isNaN(row[COL_AMOUNT])) {
+        let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
+
+        if (isCancel(row)) {
+          calculateExpend[expendKey] -= positiveValue;
+        } else {
+          calculateExpend[expendKey] += positiveValue;
+        }
+        isMatched = true;
+
+        // 一時負担処理
+        if (tempFlug_N) {
+          if (isCancel(row)) {
+            calculateExpend.tempNaoto -= positiveValue;
+          } else {
+            calculateExpend.tempNaoto += positiveValue;
+          }
+        }
+        if (tempFlug_S) {
+          if (isCancel(row)) {
+            calculateExpend.tempNaoto -= positiveValue;
+          } else {
+            calculateExpend.tempNaoto += positiveValue;
+          }
+        }
+      }
+      break;
+    }
+  }
+  return isMatched;
+}
+
+// CSVで集計した結果を実際のシートに書き戻す
+function applyBasisCells(SPREADSHEET, basisCells, calculateExpend, calculateOnline, imButtonPressed) {
+  try {
+    outputLog("INFO", "basisCells 処理開始", imButtonPressed);
+
+    let importCells = [];
+
+    // basisCells から importCells を生成
+    basisCells.forEach(cell => {
+      if (cell.sheetName === SHEET_THOUBOKANRI) return;
+      importCells.push({
+        sheetName: cell.sheetName,
+        row: cell.row + 1,
+        column: cell.column
+      });
+    });
+
+    // 各 importCell に対してシートを更新
+    importCells.forEach(importCell => {
+      let sheet = SPREADSHEET.getSheetByName(importCell.sheetName);
+      let data = sheet.getRange("A:A").getValues();
+
+      // 最終行を探索
+      let lastRow = 0;
+      for (let i = data.length - 1; i >= 0; i--) {
+        if (data[i][0] !== "") {
+          lastRow = i + 1;
+          break;
+        }
+      }
+
+      // シート種別ごとのカテゴリ定義
+      let categoryData, mapData, calculateData;
+      if (sheet.getName() === SHEET_SISYUTUKANRI) {
+        categoryData = EXPEND_CATEGORY;
+        mapData = EXPEND_MAP;
+        calculateData = calculateExpend;
+      } else if (sheet.getName() === SHEET_ONLINE) {
+        categoryData = ONLINE_MEISAI_CATEGORY;
+        mapData = ONLINE_MAP;
+        calculateData = calculateOnline;
+      } else {
+        return;
+      }
+
+      // 各行のカテゴリに対応する集計値をセット
+      for (let row = importCell.row; row < lastRow; row++) {
+        let categoryValue = sheet.getRange(row, 1).getValue();
+        for (let key in categoryData) {
+          if (categoryValue === categoryData[key]) {
+            let calculateKey = mapData[key];
+            let calculatedValue = calculateData[calculateKey];
+            // 基本的に上書きする
+            sheet.getRange(row, importCell.column).setValue(calculatedValue);
+            break;
+          }
+        }
+      }
+    });
+
+    outputLog("INFO", "basisCells 処理終了", imButtonPressed);
+  } catch (e) {
+    outputLog("ERROR", "basisCells 処理中に失敗: " + e.stack, imButtonPressed);
+    throw e;
+  }
+}
+
+// どのカテゴリにもマッチしなかった場合の処理
+function unmatchedTransaction(row, onlineFlug, isMatched, calculateOnline, calculateExpend) {
+  let matched = isMatched;
+
+  // オンラインフラグありだが未分類の場合 → OTHER_ONLINE に加算
+  if (onlineFlug && !matched) {
+    if (!isNaN(row[COL_AMOUNT])) {
+      let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
+      calculateOnline[ONLINE_MAP.OTHER_ONLINE] += positiveValue;
+      matched = true;
+    }
+  }
+
+  // それ以外の未分類 → OTHER に加算
+  if (!matched) {
+    if (!isNaN(row[COL_AMOUNT])) {
+      let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
+      calculateExpend[EXPEND_MAP.OTHER] += positiveValue;
+    }
+  }
+
+  return matched;
+}
+
+// キャンセル判定関数
+function isCancel(row) {
+  return row[COL_TYPE] && row[COL_TYPE].includes(CANCEL);
+}
