@@ -21,7 +21,10 @@ function createDynamicPieChart(sheet, yearCell, monthCell, labelRange, dateRange
   let month = sheet.getRange(monthCell).getValue();
 
   // 年と月が空白の場合は処理を中断
-  if (!year || !month) return;
+  if (!year || !month) {
+    SpreadsheetApp.getUi().alert("年月の入力先セルの定義を確認してください");
+    return
+  };
 
   // 年月を生成 (月を文字列化して補正)
   let targetDate = `${year}/${month.toString().padStart(2, "0")}`;

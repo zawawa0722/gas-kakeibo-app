@@ -1,4 +1,5 @@
 function analyzeHouseholdBudget(tyoubo, sisyutu) {
+  
   // AIへのプロンプトを作成
   // オブジェクトをスペース区切りで配列として取得
   let tyouboArray = tyoubo.match(/[^:\s]+:\s*[^:\s]+/g);
@@ -17,27 +18,24 @@ function analyzeHouseholdBudget(tyoubo, sisyutu) {
   `;
 
   let payload = {
-    model: "gpt-4",
-    messages: [{ role: "user", content: prompt }],
+    model: 'gpt-4',
+    messages: [{ role: 'user', content: prompt }],
     temperature: 0.7,
-    max_tokens: 500,
+    max_tokens: 500
   };
 
   let options = {
-    method: "post",
-    contentType: "application/json",
+    method: 'post',
+    contentType: 'application/json',
     headers: {
-      Authorization: "Bearer " + API_OPENAI,
+      Authorization: 'Bearer ' + API_OPENAI
     },
-    payload: JSON.stringify(payload),
+    payload: JSON.stringify(payload)
   };
 
-  let response = UrlFetchApp.fetch(
-    "https://api.openai.com/v1/chat/completions",
-    options,
-  );
+  let response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', options);
   let json = JSON.parse(response.getContentText());
   let aiComment = json.choices[0].message.content.trim();
 
-  return aiComment;
+  return aiComment
 }

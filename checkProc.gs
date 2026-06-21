@@ -1,4 +1,5 @@
 function extractTargetLine(fileId, imButtonPressed) {
+  
   // 日付文字列の作成
   let targetDate;
   let TODAY = new Date();
@@ -6,19 +7,15 @@ function extractTargetLine(fileId, imButtonPressed) {
   if (imButtonPressed) {
     // yearCell と monthCell の値を取得
     let tyoubosheet = SPREADSHEET.getSheetByName(SHEET_THOUBOKANRI);
-    let year = tyoubosheet
-      .getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell)
-      .getValue();
-    let month = tyoubosheet
-      .getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell)
-      .getValue();
-    targetDate = `${year}/${String(month).padStart(2, "0")}`;
+    let year = tyoubosheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
+    let month = tyoubosheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell).getValue();
+    targetDate = `${year}/${String(month).padStart(2, '0')}`;
   } else {
     // imButtonPressed が FALSE の場合、先月の日付文字列を作成
     TODAY.setMonth(TODAY.getMonth() - 1); // 先月に設定
     let year = TODAY.getFullYear();
     let month = TODAY.getMonth() + 1; // 月は0始まりのため+1
-    targetDate = `${year}/${String(month).padStart(2, "0")}`;
+    targetDate = `${year}/${String(month).padStart(2, '0')}`;
   }
 
   // ファイルを取得し内容を読み取る
@@ -39,8 +36,7 @@ function extractTargetLine(fileId, imButtonPressed) {
     // 必要条件を満たす行を格納
     if (
       line.length === 8 && // 要素数が8であることを確認
-      line[0] &&
-      line[0].includes(targetDate) && // 日付文字列が含まれる
+      line[0] && line[0].includes(targetDate) && // 日付文字列が含まれる
       line[6] === "1" // インデックス6が "1" であること
     ) {
       filteredArray.push(line);
@@ -54,7 +50,7 @@ function extractTargetLine(fileId, imButtonPressed) {
 function parseCSVLine(line) {
   let regex = /("([^"]|(""))*"|[^,]+|(?<=,)(?=,))/g; // CSVのルールに従って分割
   let matches = [...line.matchAll(regex)]; // 正規表現で全てのマッチを取得
-  return matches.map((match) => {
+  return matches.map(match => {
     let value = match[0];
     if (value.startsWith('"') && value.endsWith('"')) {
       value = value.slice(1, -1).replace(/""/g, '"'); // ダブルクオートを解除
@@ -63,9 +59,10 @@ function parseCSVLine(line) {
   });
 }
 
-//
+
+// 
 function checkSheetsDate(imButtonPressed) {
-  // 結果を格納する配列
+   // 結果を格納する配列
   let result = [];
   let TODAY = new Date();
   // imButtonPressed に基づいてターゲット日付を作成
@@ -73,22 +70,18 @@ function checkSheetsDate(imButtonPressed) {
   let SPREADSHEET = getSpreadsheet();
   if (imButtonPressed) {
     // G15 と H15 から年と月を取得して日付を生成 (帳簿管理を基準)
-    let year = SPREADSHEET.getRange(
-      CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell,
-    ).getValue();
-    let month = SPREADSHEET.getRange(
-      CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell,
-    ).getValue();
+    let year = SPREADSHEET.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell).getValue();
+    let month = SPREADSHEET.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].monthCell).getValue();
     month = month < 10 ? `0${month}` : month; // 前ゼロを付与
     targetDate = `${year}/${month}`;
   } else {
     // 本日の先月の日付を計算して yyyy/MM 形式で取得
     let lastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
-    targetDate = Utilities.formatDate(lastMonth, "Asia/Tokyo", "yyyy/MM");
+    targetDate = Utilities.formatDate(lastMonth, 'Asia/Tokyo', "yyyy/MM");
   }
 
   // 対象シートをループ処理
-  [SHEET_THOUBOKANRI, SHEET_SISYUTUKANRI, SHEET_ONLINE].forEach((sheetName) => {
+  [SHEET_THOUBOKANRI, SHEET_SISYUTUKANRI, SHEET_ONLINE].forEach(sheetName => {
     let sheet = SPREADSHEET.getSheetByName(sheetName);
     if (!sheet) {
       console.warn(`シート "${sheetName}" が見つかりませんでした。`);
@@ -105,7 +98,7 @@ function checkSheetsDate(imButtonPressed) {
         result.push({
           sheetName: sheetName,
           row: sheet.getRange(positions.dateRange).getRow(),
-          column: columnIndex + 2, // A列から始まるため +2
+          column: columnIndex + 2 // A列から始まるため +2
         });
       }
     });
@@ -114,22 +107,19 @@ function checkSheetsDate(imButtonPressed) {
   return result; // 結果を返す
 }
 
+
 // CSVインポートの成否チェック
 function checkImportValue(basicCells) {
   let TODAY = new Date();
   let SPREADSHEET = getSpreadsheet();
   let getlastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
-  let targetyyyyMM = Utilities.formatDate(
-    getlastMonth,
-    Session.getScriptTimeZone(),
-    "yyyy/MM",
-  );
+  let targetyyyyMM = Utilities.formatDate(getlastMonth, Session.getScriptTimeZone(), "yyyy/MM");
 
   let checkFlag = false; // ① チェックフラグをfalseに初期化
 
   // ② basicCells 内の対象シートを処理
   let targetSheets = [SHEET_SISYUTUKANRI, SHEET_ONLINE];
-
+  
   for (let cellInfo of basicCells) {
     if (!targetSheets.includes(cellInfo.sheetName)) {
       continue; // 対象外のシートはスキップ
@@ -138,9 +128,7 @@ function checkImportValue(basicCells) {
     let sheet = SPREADSHEET.getSheetByName(cellInfo.sheetName);
     if (!sheet) continue;
 
-    let dateRange = sheet
-      .getRange(CELL_POSITIONS[cellInfo.sheetName].dateRange)
-      .getValues()[0]; // 1行分取得
+    let dateRange = sheet.getRange(CELL_POSITIONS[cellInfo.sheetName].dateRange).getValues()[0]; // 1行分取得
     let targetColumn = dateRange.indexOf(targetyyyyMM); // ③ 一致する列を検索
 
     if (targetColumn === -1) {
@@ -158,8 +146,7 @@ function checkImportValue(basicCells) {
     let values = dataRange.getValues();
 
     for (let row of values) {
-      if (row[0] === null || row[0] === "") {
-        // 値がnullまたは空文字なら
+      if (row[0] === null || row[0] === "") { // 値がnullまたは空文字なら
         checkFlag = true;
         break;
       }
@@ -167,3 +154,5 @@ function checkImportValue(basicCells) {
   }
   return checkFlag; // ⑤ フラグをリターン
 }
+
+

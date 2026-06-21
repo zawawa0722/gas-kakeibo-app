@@ -1,4 +1,5 @@
 function importCsv(imButtonPressed) {
+
   // トリガ実行の場合はボタン実行フラグをオフにしておく
   if (typeof imButtonPressed !== "boolean") {
     imButtonPressed = false;
@@ -12,12 +13,7 @@ function importCsv(imButtonPressed) {
   try {
     SPREADSHEET = getSpreadsheet();
   } catch (e) {
-    outputLog(
-      "ERROR",
-      "スプレッドシート取得処理でエラーが発生しました。: " + e.stack,
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("ERROR", "スプレッドシート取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
     throw e;
   }
 
@@ -25,31 +21,16 @@ function importCsv(imButtonPressed) {
   try {
     fileId = getFileId(imButtonPressed);
   } catch (e) {
-    outputLog(
-      "ERROR",
-      "CSVファイル取得処理でエラーが発生しました。: " + e.stack,
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("ERROR", "CSVファイル取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
     throw e;
   }
 
   // CSVファイルから今月分の明細を取得
   try {
     gotArray = extractTargetLine(fileId, imButtonPressed);
-    outputLog(
-      "INFO",
-      "今月分の明細カウント数: " + gotArray.length + "件",
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("INFO", "今月分の明細カウント数: " + gotArray.length + "件", imButtonPressed, flagObj);
   } catch (e) {
-    outputLog(
-      "ERROR",
-      "今月の明細取得処理でエラ-が発生しました: " + e.stack,
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("ERROR", "今月の明細取得処理でエラ-が発生しました: " + e.stack, imButtonPressed, flagObj);
     throw e;
   }
 
@@ -58,17 +39,13 @@ function importCsv(imButtonPressed) {
     basisCells = checkSheetsDate(imButtonPressed);
     if (!basisCells) throw new Error("basisCells が undefined");
   } catch (e) {
-    outputLog(
-      "ERROR",
-      "明細出力先セルの特定処理でエラーが発生しました: " + e.stack,
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("ERROR", "明細出力先セルの特定処理でエラーが発生しました: " + e.stack, imButtonPressed, flagObj);
     throw e;
   }
 
   // gotArrayに格納した今月分の明細を、basisCellsで取得したセルに出力する
   try {
+
     for (let i = 0; i < gotArray.length; i++) {
       let onlineCardFlug = false;
       let tempFlug_N = false;
@@ -83,12 +60,9 @@ function importCsv(imButtonPressed) {
       }
 
       // 該当するカードがない場合はエラー扱いとする(ローンは除く)
-      if (
-        gotArray[i][COL_CATEGORY] !== EXPEND_CATEGORY.LOAN &&
-        !knownCards.includes(usedCard)
-      ) {
+      if (gotArray[i][COL_CATEGORY] !== EXPEND_CATEGORY.LOAN && !knownCards.includes(usedCard)) {
         throw new Error(
-          `未知のカード名です（設定と不一致）\nカード名: ${usedCard}\n明細: ${gotArray[i][COL_DESC]}`,
+          `未知のカード名です（設定と不一致）\nカード名: ${usedCard}\n明細: ${gotArray[i][COL_DESC]}`
         );
       }
 
@@ -99,7 +73,7 @@ function importCsv(imButtonPressed) {
         gotArray[i][COL_CATEGORY] === EXPEND_CATEGORY.SHOPPING
       ) {
         onlineCardFlug = true;
-      }
+      } 
 
       // 一時負担のロジック
       if (gotArray[i][COL_TYPE] === EXPEND_CATEGORY.TEMP_N) {
@@ -114,12 +88,7 @@ function importCsv(imButtonPressed) {
       if (onlineCardFlug) {
         isMatched = onlineTransaction(gotArray[i], calculateOnline);
       } else {
-        isMatched = expendTransaction(
-          gotArray[i],
-          calculateExpend,
-          tempFlug_N,
-          tempFlug_S,
-        );
+        isMatched = expendTransaction(gotArray[i], calculateExpend, tempFlug_N, tempFlug_S);
       }
 
       // どのカテゴリともマッチしなかった場合は"その他"カテゴリへ仕分ける
@@ -129,16 +98,12 @@ function importCsv(imButtonPressed) {
         isMatched,
         calculateOnline,
         calculateExpend,
-        flagObj,
+        flagObj
       );
     }
+
   } catch (e) {
-    outputLog(
-      "ERROR",
-      "取引データ反映処理でエラーが発生しました: " + e.stack,
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("ERROR", "取引データ反映処理でエラーが発生しました: " + e.stack, imButtonPressed, flagObj);
     throw e;
   }
 
@@ -155,29 +120,22 @@ function importCsv(imButtonPressed) {
       "WARN",
       "オンライン明細の出力が 0 件でした（CSV内のカード名が変更された可能性あり）",
       imButtonPressed,
-      flagObj,
+      flagObj
     );
   }
 
   // 一般支出の「その他」カテゴリが 10000円以上の場合は警告扱いとする
-  if (calculateExpend.otherexp > 10000) {
+  if (calculateExpend.otherexp > 10000){
     outputLog(
       "WARN",
       "支出カテゴリ「その他」が10000円以上です。\n「その他」の明細を確認してください。",
       imButtonPressed,
-      flagObj,
+      flagObj
     );
   }
 
   // シートに結果を出力
-  applyBasisCells(
-    SPREADSHEET,
-    basisCells,
-    calculateExpend,
-    calculateOnline,
-    imButtonPressed,
-    flagObj,
-  );
+  applyBasisCells(SPREADSHEET, basisCells, calculateExpend, calculateOnline, imButtonPressed, flagObj);
 
   // CSVインポート結果確認
   try {
@@ -185,22 +143,11 @@ function importCsv(imButtonPressed) {
     // CSVインポート結果通知
     compNotify(imButtonPressed, emptyFlug, flagObj.hasWarnOrError);
   } catch (e) {
-    outputLog(
-      "ERROR",
-      "CSVインポート処理/CSVインポート結果通知処理でエラーが発生しました: " +
-        e.stack,
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("ERROR", "CSVインポート処理/CSVインポート結果通知処理でエラーが発生しました: " + e.stack, imButtonPressed, flagObj);
     throw e;
   }
 
-  outputLog(
-    "INFO",
-    "importCsv処理が正常終了しました",
-    imButtonPressed,
-    flagObj,
-  );
+  outputLog("INFO", "importCsv処理が正常終了しました", imButtonPressed, flagObj);
 }
 
 // オンライン明細の計算ロジック
@@ -209,7 +156,7 @@ function onlineTransaction(row, calculateOnline) {
 
   for (const [key, value] of Object.entries(ONLINE_CATEGORY)) {
     const isHit = Array.isArray(value)
-      ? value.some((v) => row[COL_DESC].includes(v))
+      ? value.some(v => row[COL_DESC].includes(v))
       : row[COL_DESC].includes(value);
 
     if (isHit) {
@@ -275,28 +222,21 @@ function expendTransaction(row, calculateExpend, tempFlug_N, tempFlug_S) {
 }
 
 // CSVで集計した結果を支出管理シートに書き落とす
-function applyBasisCells(
-  SPREADSHEET,
-  basisCells,
-  calculateExpend,
-  calculateOnline,
-  imButtonPressed,
-  flagObj,
-) {
+function applyBasisCells(SPREADSHEET, basisCells, calculateExpend, calculateOnline, imButtonPressed, flagObj) {
   try {
     let importCells = [];
     // basisCells から importCells を生成
-    basisCells.forEach((cell) => {
+    basisCells.forEach(cell => {
       if (cell.sheetName === SHEET_THOUBOKANRI) return;
       importCells.push({
         sheetName: cell.sheetName,
         row: cell.row + 1,
-        column: cell.column,
+        column: cell.column
       });
     });
 
     // 各 importCell に対してシートを更新
-    importCells.forEach((importCell) => {
+    importCells.forEach(importCell => {
       let sheet = SPREADSHEET.getSheetByName(importCell.sheetName);
       let data = sheet.getRange("A:A").getValues();
 
@@ -338,25 +278,13 @@ function applyBasisCells(
       }
     });
   } catch (e) {
-    outputLog(
-      "ERROR",
-      "basisCells 処理中にエラーが発生しました: " + e.stack,
-      imButtonPressed,
-      flagObj,
-    );
+    outputLog("ERROR", "basisCells 処理中にエラーが発生しました: " + e.stack, imButtonPressed, flagObj);
     throw e;
   }
 }
 
 // どのカテゴリにもマッチしなかった場合の処理
-function unmatchedTransaction(
-  row,
-  onlineCardFlug,
-  isMatched,
-  calculateOnline,
-  calculateExpend,
-  flagObj,
-) {
+function unmatchedTransaction(row, onlineCardFlug, isMatched, calculateOnline, calculateExpend, flagObj) {
   let matched = isMatched;
 
   // オンラインフラグありだが未分類の場合 → OTHER_ONLINE に加算
@@ -370,11 +298,12 @@ function unmatchedTransaction(
         "WARN",
         `オンライン未分類："${row[COL_DESC]}" / ${row[COL_AMOUNT]}`,
         false,
-        flagObj,
+        flagObj
       );
 
       matched = true;
     }
+
   }
 
   // それ以外の未分類 → OTHER に加算
