@@ -17,6 +17,22 @@ function importCsv(imButtonPressed) {
     throw e;
   }
 
+  // 設定シートの値を取得
+  try {
+    SHEET_SETTING_CONTENTS = loadSheetSetting(SPREADSHEET);
+  } catch (e) {
+    outputLog("ERROR", "設定シート読み込み処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
+    throw e;
+  }
+
+  // プログラム内部で保持するユーザ名に設定シートの情報を反映
+  try {
+    updateExpendCategoryNames();
+  } catch (e) {
+    outputLog("ERROR", "支出項目名の更新処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
+    throw e;
+  }
+
   // 取り込み対象のCSVファイルを取得
   try {
     fileId = getFileId(imButtonPressed);
@@ -265,13 +281,25 @@ function applyBasisCells(SPREADSHEET, basisCells, calculateExpend, calculateOnli
 
       // 各行のカテゴリに対応する集計値をセット
       for (let row = importCell.row; row < lastRow; row++) {
+        // 書き込み対象のセルをあらかじめ取得
+        let targetRange = sheet.getRange(row, importCell.column);
+        
+        // セルに設定されている数式を取得
+        let formula = targetRange.getFormula();
+        
+        // 数式の場合はそのカテゴリの書き込み処理をスキップする
+        if (formula !== "") {
+          continue; 
+        }
+
         let categoryValue = sheet.getRange(row, 1).getValue();
         for (let key in categoryData) {
           if (categoryValue === categoryData[key]) {
             let calculateKey = mapData[key];
             let calculatedValue = calculateData[calculateKey];
-            // 基本的に上書きする
-            sheet.getRange(row, importCell.column).setValue(calculatedValue);
+            
+            // 数式が入っていない場合のみ、上書き入力する
+            targetRange.setValue(calculatedValue);
             break;
           }
         }

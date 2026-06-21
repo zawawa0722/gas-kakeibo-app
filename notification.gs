@@ -42,6 +42,7 @@ function sendFamilyTransferRequest() {
   } catch (e) {
     outputLog("ERROR", "AI分析コメントの取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
   }
+  
   let options = {
     "method": "post",
     "headers": {
@@ -55,7 +56,7 @@ function sendFamilyTransferRequest() {
       }]
     })
   };
-
+  
   UrlFetchApp.fetch("https://api.line.me/v2/bot/message/broadcast", options);
 }
 
@@ -151,9 +152,9 @@ function createMessage() {
   let TODAY = new Date();
 
   // 設定シート読み込み
-  const CONFIG = loadConfig();
-  const USER_A = CONFIG.USER_A;
-  const USER_B = CONFIG.USER_B;
+  SHEET_SETTING_CONTENTS = loadSheetSetting(SPREADSHEET);
+  const USER_A_NAME = SHEET_SETTING_CONTENTS.USER_A_NAME;
+  const USER_B_NAME = SHEET_SETTING_CONTENTS.USER_B_NAME;
 
   // 先月のyyyy/MM表記を生成 (ゼロ埋め対応)
   let lastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
@@ -190,7 +191,7 @@ function createMessage() {
   }
 
   // メッセージ作成
-  let messageBody = `${headComment}\n\n${incomeAndExpenditure}\n${feedBack}\n\n★今月の振込金額\n${USER_A}：${row6Value.toLocaleString()}円\n${USER_B}：${row7Value.toLocaleString()}円`;
+  let messageBody = `${headComment}\n\n${incomeAndExpenditure}\n${feedBack}\n\n★今月の振込金額\n${USER_A_NAME}：${row6Value.toLocaleString()}円\n${USER_B_NAME}：${row7Value.toLocaleString()}円`;
   console.log(messageBody);
 
   return messageBody

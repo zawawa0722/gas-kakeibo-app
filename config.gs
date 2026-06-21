@@ -27,6 +27,7 @@ const SHEET_SYUNYUKANRI = "収入管理"
 const SHEET_SISYUTUKANRI = "支出管理"
 const SHEET_ONLINE = "オンライン明細"
 const SHEET_LOG = "ログ"
+const SHEET_SETTING = "設定"
 const SHEET_THOUBOKANRI_BK = "帳簿管理履歴"
 const SHEET_SYUNYUKANRI_BK = "収入管理履歴"
 const SHEET_SISYUTUKANRI_BK = "支出管理履歴"
@@ -45,14 +46,15 @@ const COL_CARD = 7;     // カード種別
 
 // 各シートのグラフ出力時の定数
 const CELL_POSITIONS = {
-  [SHEET_THOUBOKANRI]: {
+   // 帳簿管理シートのグラフは自動更新されるため、出力不要
+  /*[SHEET_THOUBOKANRI]: {
     yearCell: "A16",
     monthCell: "B16",
     labelRange: "A4:A9",
     dateRange: "B3:M3",
     totalResultRange: "A8:A10",
-    chartPosition: "A29"
-  },
+    chartPosition: "A30"
+  },*/
   [SHEET_SISYUTUKANRI]: {
     yearCell: "A31",
     monthCell: "B31",
@@ -109,7 +111,7 @@ const CLEAR_RANGE = {
 };
 
 // 支出カテゴリ
-const EXPEND_CATEGORY = {
+let EXPEND_CATEGORY = {
   DENKI: "電気料金",
   SUIDOU: "水道料金",
   GASS: "ガス料金",
@@ -118,8 +120,8 @@ const EXPEND_CATEGORY = {
   KONBINI: "コンビニ",
   GAISYOKU: "外食",
   SEIKATU: "生活用品",
-  TEMP_USER_A: "直人一時負担",
-  TEMP_USER_B: "沙羅一時負担",
+  TEMP_USER_A: "",
+  TEMP_USER_B: "",
   BUNKATU: "分割費",
   SABSC: "サブスク",
   ENTAME: "エンタメ",
@@ -180,7 +182,12 @@ const ONLINE_CATEGORY = {
             "ｓｈｉｎｓｏｕ商店",
             "ＵＬＴＯＲＡ　公式",
             "ＥＸＣＥＰＴＩＯＮ本店",
-            "ｆｕｔｕｒａ　ｒｕｒｕ"
+            "ｆｕｔｕｒａ　ｒｕｒｕ",
+            "ｽｲﾂﾁﾎﾞﾂﾄｶﾌﾞｼｷｶｲｼﾔ",
+            "アエトニクス　Ｒａｉｎ＆Ｏｕｔ",
+            "赤ちゃんデパート",
+            "ｒｅｌｉｅｆ１０",
+            "ＭＯＮＯ　ＫＯＴＯ　ＤＥＰＴ．"
            ],
   NITORI: "ニトリネット",
   MUJIRUSI: "無印良品",
