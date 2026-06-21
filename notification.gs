@@ -1,7 +1,9 @@
+let flagObj = { hasWarnOrError: false };
+
 // CSVファイル配置依頼
 function sendEmailRequestCsvStorage() {
   // メールを送信
-  GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_REQUEST_CSV_STORAGE, BODY_REQUEST_CSV_STORAGE);
+  GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_REQUEST_CSV_STORAGE, BODY_REQUEST_CSV_STORAGE);
 }
 
 // インポート結果通知
@@ -10,12 +12,12 @@ function compNotify(buttonFlug, emptyCheckFlug, hasWarnOrError) {
   if (buttonFlug == false){
     if (emptyCheckFlug == false){
         if (hasWarnOrError) {
-          GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT_INCLUDE_ERROR);
+          GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT_INCLUDE_ERROR);
         }else{
-          GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT);
+          GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT);
         }
     }else{
-      GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_FAILED_IMPORT, BODY_FAILED_IMPORT);
+      GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_FAILED_IMPORT, BODY_FAILED_IMPORT);
     }
   }
 }
@@ -23,7 +25,7 @@ function compNotify(buttonFlug, emptyCheckFlug, hasWarnOrError) {
 // バックアップリクエスト
 function sendEmailRequestBuckup() {
   // メールを送信
-  GmailApp.sendEmail(RECIPIENTS.naoto, SUBJECT_REQUEST_BUCKUP, BODY_REQUEST_BUCKUP);
+  GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_REQUEST_BUCKUP, BODY_REQUEST_BUCKUP);
 }
 
 // 振込依頼通知
@@ -31,13 +33,14 @@ function sendFamilyTransferRequest() {
 
   let imButtonPressed = false
   let message
+  let flagObj = { hasWarnOrError: false };
   SPREADSHEET = getSpreadsheet();
   
   // getFileIdのエラー確認
   try {
     message = createMessage()
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "AI分析コメントの取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
   }
   let options = {
     "method": "post",
@@ -159,14 +162,14 @@ function createMessage() {
   try {
     incomeAndExpenditure = getResaltBalance(tyoubosheet, tyoubodateRange, lastMonthText)
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "家計簿項目の取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
   }
   
   // 支出管理の全項目を取得
   try {
     spending = getExpenses(sisyutusheet, sisyutudateRange, lastMonthText)
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "支出項目の取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
   }
 
   // 帳簿管理の6行目と7行目の値を取得
@@ -178,7 +181,7 @@ function createMessage() {
   try {
     feedBack = analyzeHouseholdBudget(incomeAndExpenditure, spending)
   } catch (e) {
-    outputErrorLog(e, imButtonPressed);
+    outputLog("ERROR", "AI分析コメントの取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
   }
 
   // メッセージ作成
