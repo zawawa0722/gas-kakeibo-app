@@ -48,8 +48,8 @@ function importCsv(imButtonPressed) {
 
     for (let i = 0; i < gotArray.length; i++) {
       let onlineCardFlug = false;
-      let tempFlug_N = false;
-      let tempFlug_S = false;
+      let tempFlug_A = false;
+      let tempFlug_B = false;
       let isMatched = false;
       let knownCards = Object.values(CARD_CATEGORY);
       let usedCard = gotArray[i][COL_CARD];
@@ -76,11 +76,11 @@ function importCsv(imButtonPressed) {
       } 
 
       // 一時負担のロジック
-      if (gotArray[i][COL_TYPE] === EXPEND_CATEGORY.TEMP_N) {
-        tempFlug_N = true;
+      if (gotArray[i][COL_TYPE] === EXPEND_CATEGORY.TEMP_USER_A) {
+        tempFlug_A = true;
         isMatched = true;
-      } else if (gotArray[i][COL_TYPE] === EXPEND_CATEGORY.TEMP_S) {
-        tempFlug_S = true;
+      } else if (gotArray[i][COL_TYPE] === EXPEND_CATEGORY.TEMP_USER_B) {
+        tempFlug_B = true;
         isMatched = true;
       }
 
@@ -88,7 +88,7 @@ function importCsv(imButtonPressed) {
       if (onlineCardFlug) {
         isMatched = onlineTransaction(gotArray[i], calculateOnline);
       } else {
-        isMatched = expendTransaction(gotArray[i], calculateExpend, tempFlug_N, tempFlug_S);
+        isMatched = expendTransaction(gotArray[i], calculateExpend, tempFlug_A, tempFlug_B);
       }
 
       // どのカテゴリともマッチしなかった場合は"その他"カテゴリへ仕分ける
@@ -177,7 +177,7 @@ function onlineTransaction(row, calculateOnline) {
 }
 
 // オフライン明細の計算ロジック
-function expendTransaction(row, calculateExpend, tempFlug_N, tempFlug_S) {
+function expendTransaction(row, calculateExpend, tempFlug_A, tempFlug_B) {
   let isMatched = false;
 
   for (const [key, value] of Object.entries(EXPEND_CATEGORY)) {
@@ -200,18 +200,18 @@ function expendTransaction(row, calculateExpend, tempFlug_N, tempFlug_S) {
         isMatched = true;
 
         // 一時負担処理
-        if (tempFlug_N) {
+        if (tempFlug_A) {
           if (isCancel(row)) {
-            calculateExpend.tempNaoto -= positiveValue;
+            calculateExpend.temp_user_A -= positiveValue;
           } else {
-            calculateExpend.tempNaoto += positiveValue;
+            calculateExpend.temp_user_A += positiveValue;
           }
         }
-        if (tempFlug_S) {
+        if (tempFlug_B) {
           if (isCancel(row)) {
-            calculateExpend.tempSara -= positiveValue;
+            calculateExpend.temp_user_B -= positiveValue;
           } else {
-            calculateExpend.tempSara += positiveValue;
+            calculateExpend.temp_user_B += positiveValue;
           }
         }
       }

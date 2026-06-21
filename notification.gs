@@ -3,7 +3,7 @@ let flagObj = { hasWarnOrError: false };
 // CSVファイル配置依頼
 function sendEmailRequestCsvStorage() {
   // メールを送信
-  GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_REQUEST_CSV_STORAGE, BODY_REQUEST_CSV_STORAGE);
+  GmailApp.sendEmail(EMAIL_PRIMARY, SUBJECT_REQUEST_CSV_STORAGE, BODY_REQUEST_CSV_STORAGE);
 }
 
 // インポート結果通知
@@ -12,12 +12,12 @@ function compNotify(buttonFlug, emptyCheckFlug, hasWarnOrError) {
   if (buttonFlug == false){
     if (emptyCheckFlug == false){
         if (hasWarnOrError) {
-          GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT_INCLUDE_ERROR);
+          GmailApp.sendEmail(EMAIL_PRIMARY, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT_INCLUDE_ERROR);
         }else{
-          GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT);
+          GmailApp.sendEmail(EMAIL_PRIMARY, SUBJECT_SCCEED_IMPORT, BODY_SCCEED_IMPORT);
         }
     }else{
-      GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_FAILED_IMPORT, BODY_FAILED_IMPORT);
+      GmailApp.sendEmail(EMAIL_PRIMARY, SUBJECT_FAILED_IMPORT, BODY_FAILED_IMPORT);
     }
   }
 }
@@ -25,7 +25,7 @@ function compNotify(buttonFlug, emptyCheckFlug, hasWarnOrError) {
 // バックアップリクエスト
 function sendEmailRequestBuckup() {
   // メールを送信
-  GmailApp.sendEmail(EMAIL_NAOTO, SUBJECT_REQUEST_BUCKUP, BODY_REQUEST_BUCKUP);
+  GmailApp.sendEmail(EMAIL_PRIMARY, SUBJECT_REQUEST_BUCKUP, BODY_REQUEST_BUCKUP);
 }
 
 // 振込依頼通知
@@ -150,6 +150,11 @@ function createMessage() {
   let feedBack
   let TODAY = new Date();
 
+  // 設定シート読み込み
+  const CONFIG = loadConfig();
+  const USER_A = CONFIG.USER_A;
+  const USER_B = CONFIG.USER_B;
+
   // 先月のyyyy/MM表記を生成 (ゼロ埋め対応)
   let lastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
   let lastMonthText = `${lastMonth.getFullYear()}/${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
@@ -185,7 +190,7 @@ function createMessage() {
   }
 
   // メッセージ作成
-  let messageBody = `${headComment}\n\n${incomeAndExpenditure}\n${feedBack}\n\n★今月の振込金額\n直人：${row6Value.toLocaleString()}円\n沙羅：${row7Value.toLocaleString()}円`;
+  let messageBody = `${headComment}\n\n${incomeAndExpenditure}\n${feedBack}\n\n★今月の振込金額\n${USER_A}：${row6Value.toLocaleString()}円\n${USER_B}：${row7Value.toLocaleString()}円`;
   console.log(messageBody);
 
   return messageBody

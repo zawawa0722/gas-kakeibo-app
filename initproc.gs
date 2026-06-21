@@ -18,6 +18,21 @@ function getSpreadsheet() {
   return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
 
+// 設定シートの値を取得
+function loadConfig() {
+  if (CONFIG) return CONFIG;
+
+  const sheet = SPREADSHEET.getSheetByName("設定");
+  const values = sheet.getDataRange().getValues();
+
+  CONFIG = {};
+  values.slice(1).forEach(row => {
+    CONFIG[row[0]] = row[1];
+  });
+
+  return CONFIG;
+}
+
 // 対象ファイルID取得関数（ボタンが押されたかどうかで処理を分岐）
 function getFileId(isButtonPressed) {
   // シートの取得
