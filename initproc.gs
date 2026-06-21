@@ -1,7 +1,11 @@
 // ボタンフラグ取得
 function onButtonClick() {
   // 実行前に確認メッセージを表示
-  let result = Browser.msgBox("確認", "家計簿出力処理を実行してもよろしいですか？", Browser.Buttons.YES_NO);
+  let result = Browser.msgBox(
+    "確認",
+    "家計簿出力処理を実行してもよろしいですか？",
+    Browser.Buttons.YES_NO,
+  );
 
   // YESボタンが押された場合のみスクリプトを実行
   if (result == "yes") {
@@ -31,15 +35,17 @@ function getFileId(isButtonPressed) {
 
   // ボタンが押された場合、G15とH15セルの日付をそのまま使用
   if (isButtonPressed) {
-    targetDateget = tyoubosheet.getRange('G15').getValue();
+    targetDateget = tyoubosheet
+      .getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].yearCell)
+      .getValue();
     // G15から年を取得してファイル名を作成
     targetFileYear = targetDateget;
     targetFileName = `ワンバンク支出_${targetFileYear}.csv`;
-  } else { 
+  } else {
     // ボタンが押されなかった場合、1ヶ月前の日付を使用
     oneMonthAgo = new Date(TODAY);
     oneMonthAgo.setMonth(TODAY.getMonth() - 1);
-    targetFileYear = Utilities.formatDate(oneMonthAgo, 'JST', 'yyyy');
+    targetFileYear = Utilities.formatDate(oneMonthAgo, "JST", "yyyy");
     targetFileName = `ワンバンク支出_${targetFileYear}.csv`;
   }
 
@@ -51,7 +57,7 @@ function getFileId(isButtonPressed) {
 
   // 取得ファイル名の中に対象ファイルがあるかチェック
   for (let i = 0; i < fileNameArray.length; i++) {
-    if (normalizeString(fileNameArray[i]) === normalizeString(targetFileName)) {  
+    if (normalizeString(fileNameArray[i]) === normalizeString(targetFileName)) {
       fileExistFlag = true;
       // ファイルのURLを取得
       foundFilePath = fileObjects[i].getUrl();
@@ -69,10 +75,9 @@ function getFileId(isButtonPressed) {
   }
 }
 
-
 // Unicodeの正規化を実施
 function normalizeString(str) {
-  return str.normalize('NFKC');
+  return str.normalize("NFKC");
 }
 
 // ワンバンクフォルダ内の全ファイル名とファイルオブジェクトを取得
@@ -98,5 +103,3 @@ function extractFileId(fileUrl) {
   let match = fileUrl.match(idPattern);
   return match ? match[1] : null;
 }
-
-
