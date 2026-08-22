@@ -5,7 +5,7 @@ function importCsv(imButtonPressed) {
     imButtonPressed = false;
   }
 
-  let SPREADSHEET, fileId, gotArray, basisCells;
+  let SPREADSHEET, fileId, gotArray, basisCells, settingContents;
   let flagObj = { hasWarnOrError: false };
   outputLog("INFO", "importCsv処理を開始します", imButtonPressed, flagObj);
 
@@ -19,7 +19,10 @@ function importCsv(imButtonPressed) {
 
   // 設定シートの値を取得
   try {
-    SHEET_SETTING_CONTENTS = loadSheetSetting(SPREADSHEET);
+    settingContents = loadSheetSetting(SPREADSHEET);
+    SHEET_SETTING_CONTENTS = settingContents.settingContents
+    SHOP_LIST_RAKUTEN = settingContents.shopListRakuten
+    SHOP_LIST_OTHER = settingContents.shopListOther
   } catch (e) {
     outputLog("ERROR", "設定シート読み込み処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
     throw e;
@@ -102,7 +105,7 @@ function importCsv(imButtonPressed) {
 
       // 明細の解析と計算
       if (onlineCardFlug) {
-        isMatched = onlineTransaction(gotArray[i], calculateOnline);
+        isMatched = onlineTransaction(gotArray[i], calculateOnline, flagObj);
       } else {
         isMatched = expendTransaction(gotArray[i], calculateExpend, tempFlug_A, tempFlug_B);
       }
@@ -167,26 +170,70 @@ function importCsv(imButtonPressed) {
 }
 
 // オンライン明細の計算ロジック
-function onlineTransaction(row, calculateOnline) {
+function onlineTransaction(row, calculateOnline, flagObj) {
   let isMatched = false;
+  let categoryKey = null;
 
+  // 1. ONLINE_CATEGORY の判定（OTHER_ONLINE / UNKNOWN_ONLINE 以外）
   for (const [key, value] of Object.entries(ONLINE_CATEGORY)) {
+    if (key === 'OTHER_ONLINE' || key === 'UNKNOWN_ONLINE') continue;
+
     const isHit = Array.isArray(value)
       ? value.some(v => row[COL_DESC].includes(v))
       : row[COL_DESC].includes(value);
 
     if (isHit) {
-      let onlineKey = ONLINE_MAP[key];
-      if (onlineKey && !isNaN(row[COL_AMOUNT])) {
-        let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
-        if (isCancel(row)) {
-          calculateOnline[onlineKey] -= positiveValue;
-        } else {
-          calculateOnline[onlineKey] += positiveValue;
-        }
-        isMatched = true;
-      }
+      categoryKey = key;
       break;
+    }
+  }
+
+  // 2. 判定①：ONLINE_CATEGORY でヒットしない場合、SHOP_LIST_RAKUTEN 内を検索
+  if (!categoryKey && Array.isArray(SHOP_LIST_RAKUTEN)) {
+    if (SHOP_LIST_RAKUTEN.some(shop => row[COL_DESC].includes(shop))) {
+      categoryKey = 'RAKUTEN';
+    }
+  }
+
+  // 3. 判定②：①でもヒットしない場合、SHOP_LIST_OTHER 内を検索
+  if (!categoryKey) {
+    if (Array.isArray(SHOP_LIST_OTHER) && SHOP_LIST_OTHER.some(shop => row[COL_DESC].includes(shop))) {
+      categoryKey = 'OTHER_ONLINE';
+    } else {
+      categoryKey = 'UNKNOWN_ONLINE';
+    }
+  }
+
+  // 4. カテゴリに応じた金額集計処理
+  if (categoryKey && !isNaN(row[COL_AMOUNT])) {
+    // UNKNOWN_ONLINE の場合は「その他」のマップキー（ONLINE_MAP['OTHER_ONLINE']）に合算
+    let mapLookupKey = (categoryKey === 'UNKNOWN_ONLINE') ? 'OTHER_ONLINE' : categoryKey;
+    let onlineKey = ONLINE_MAP[mapLookupKey];
+
+    if (onlineKey) {
+      let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
+
+      // 集計用キーの初期化
+      if (calculateOnline[onlineKey] === undefined) {
+        calculateOnline[onlineKey] = 0;
+      }
+
+      if (isCancel(row)) {
+        calculateOnline[onlineKey] -= positiveValue;
+      } else {
+        calculateOnline[onlineKey] += positiveValue;
+      }
+      isMatched = true;
+
+      // 不明カテゴリの明細はログ出力する
+      if (categoryKey === 'UNKNOWN_ONLINE' && typeof outputLog === 'function') {
+        outputLog(
+          "WARN",
+          `不明カテゴリ明細："${row[COL_DESC]}" / ${row[COL_AMOUNT]}`,
+          false,
+          flagObj // ※ flagObj を onlineTransaction の引数に追加するか、グローバル変数として参照
+        );
+      }
     }
   }
   return isMatched;
@@ -311,34 +358,25 @@ function applyBasisCells(SPREADSHEET, basisCells, calculateExpend, calculateOnli
   }
 }
 
-// どのカテゴリにもマッチしなかった場合の処理
+// どのカテゴリにもマッチしなかった場合の処理（修正後）
 function unmatchedTransaction(row, onlineCardFlug, isMatched, calculateOnline, calculateExpend, flagObj) {
   let matched = isMatched;
 
-  // オンラインフラグありだが未分類の場合 → OTHER_ONLINE に加算
-  if (onlineCardFlug && !matched) {
-    if (!isNaN(row[COL_AMOUNT])) {
-      let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
-      calculateOnline[ONLINE_MAP.OTHER_ONLINE] += positiveValue;
-
-      // オンラインカテゴリで該当するものがない場合はログ出力
-      outputLog(
-        "WARN",
-        `オンライン未分類："${row[COL_DESC]}" / ${row[COL_AMOUNT]}`,
-        false,
-        flagObj
-      );
-
-      matched = true;
-    }
-
-  }
-
-  // それ以外の未分類 → OTHER に加算
+  // それ以外の未分類（オンライン以外のカード利用等） → OTHER に加算
   if (!matched) {
     if (!isNaN(row[COL_AMOUNT])) {
       let positiveValue = Math.abs(Number(row[COL_AMOUNT]));
-      calculateExpend[EXPEND_MAP.OTHER] += positiveValue;
+      let key = EXPEND_MAP.OTHER;
+
+      if (calculateExpend[key] === undefined) {
+        calculateExpend[key] = 0;
+      }
+
+      if (typeof isCancel === 'function' && isCancel(row)) {
+        calculateExpend[key] -= positiveValue;
+      } else {
+        calculateExpend[key] += positiveValue;
+      }
     }
   }
 

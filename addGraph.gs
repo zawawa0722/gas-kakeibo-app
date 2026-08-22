@@ -5,7 +5,7 @@ function onEdit(e) {
   let sheetName = sheet.getName();
 
   // 対象シートでなければ処理を中断
-  if (!(sheetName in CELL_POSITIONS)) return;
+  if (![SHEET_SYUNYUKANRI, SHEET_SISYUTUKANRI, SHEET_ONLINE].includes(sheetName)) return;
 
   let { yearCell, monthCell, labelRange, dateRange, chartPosition } = CELL_POSITIONS[sheetName];
 

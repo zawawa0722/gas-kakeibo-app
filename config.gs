@@ -46,15 +46,14 @@ const COL_CARD = 7;     // カード種別
 
 // 各シートのグラフ出力時の定数
 const CELL_POSITIONS = {
-   // 帳簿管理シートのグラフは自動更新されるため、出力不要
-  /*[SHEET_THOUBOKANRI]: {
+  [SHEET_THOUBOKANRI]: {
     yearCell: "A16",
     monthCell: "B16",
     labelRange: "A4:A9",
     dateRange: "B3:M3",
     totalResultRange: "A8:A10",
     chartPosition: "A30"
-  },*/
+  },
   [SHEET_SISYUTUKANRI]: {
     yearCell: "A31",
     monthCell: "B31",
@@ -124,7 +123,7 @@ let EXPEND_CATEGORY = {
   TEMP_USER_B: "",
   BUNKATU: "分割費",
   SABSC: "サブスク",
-  ENTAME: "エンタメ",
+  ASOBI: "遊び",
   HOSPITAL: "病院",
   SHOPPING: "ショッピング",
   SYUMI: "趣味",
@@ -146,53 +145,14 @@ const ONLINE_CATEGORY = {
           ],
   RAKUTEN: ["ﾗｸﾃﾝｲﾁﾊﾞ",
             "楽天",
-            "サンドラッグｅ－ｓｈｏｐ",
-            "ホット安心ストア",
-            "ａ‐ｃｕｅｂｓｈｏｐ／エーキュ",
-            "ホスピマート",
-            "ＴＫ‐ＪＩＡＮＧ",
-            "でん吉",
-            "サンドラッグｅ‐ｓｈｏｐ",
-            "Ｈａｍｅｅ（ハミィ）",
-            "便利生活　マイルーム",
-            "インテリアパレット",
-            "Ｈａｐｐｙ　Ｅｖｅｒｙｄａｙ楽",
-            "ＴＯＤＡＹ＆ＡＬＷＡＹＳ",
-            "Ｈａｐｐｙ　Ｅｖｅｒｙｄａｙ楽",
-            "スリーアールプラザ",
-            "ＳＨＯＰＷＮＹ",
-            "ＴＣＣ　Ｏｎｌｉｎｅ　Ｓｈｏｐ",
-            "ＳＯＬＩＡ　ＳＨＯＰ",
-            "中村商事",
-            "ＤｅａｒＣａｒｄｓ（ディアカー",
-            "松阪牛三重松良",
-            "おいしい醤油・味噌【足立醸造】",
-            "オーラルケアのＤＯＤ",
-            "いまどき本舗",
-            "ｂｌａｎｃｏ",
-            "まごころ屋本店",
-            "山善山屋オンラインショップ",
-            "ｎｅｗｗａｖｅｓｔｏｒｅ",
-            "【公式】いろはショップオンライ",
-            "東栄Ｓｈｏｐ",
-            "ギフト百花",
-            "東海ストア",
-            "地酒「作」＆全国銘酒専門べんの",
-            "ＤＵＥＮ　ＳＨＯＰ",
-            "ｓｈｉｎｓｏｕ商店",
-            "ＵＬＴＯＲＡ　公式",
-            "ＥＸＣＥＰＴＩＯＮ本店",
-            "ｆｕｔｕｒａ　ｒｕｒｕ",
-            "ｽｲﾂﾁﾎﾞﾂﾄｶﾌﾞｼｷｶｲｼﾔ",
-            "アエトニクス　Ｒａｉｎ＆Ｏｕｔ",
-            "赤ちゃんデパート",
-            "ｒｅｌｉｅｆ１０",
-            "ＭＯＮＯ　ＫＯＴＯ　ＤＥＰＴ．"
            ],
   NITORI: "ニトリネット",
   MUJIRUSI: "無印良品",
-  TIKTOK: "TIKTOK SHOP",
-  OTHER_ONLINE: "その他"
+  TIKTOK: ["TIKTOK SHOP",
+           "ﾃｲﾂｸﾄﾂｸ ｼﾖﾂﾌﾟ ｾﾗ-",
+          ],
+  OTHER_ONLINE: "その他",
+  UNKNOWN_ONLINE: "不明"
 };
 
 // オンラインカテゴリ
@@ -225,7 +185,7 @@ let calculateExpend = {
   temp_user_A: 0,
   temp_user_B: 0,
   sabsc: 0,
-  entame: 0,
+  asobi: 0,
   hospital: 0,
   syumi: 0,
   koutuu: 0,
@@ -262,7 +222,7 @@ const EXPEND_MAP = {
   GAISYOKU: "eateOut",
   SEIKATU: "lifeItem",
   SABSC: "sabsc",
-  ENTAME: "entame",
+  ASOBI: "asobi",
   HOSPITAL: "hospital",
   SYUMI: "syumi",
   KOUTUU: "koutuu",
