@@ -7,22 +7,8 @@ const RECEIPT_ITEM_HEADERS = [
   "レシートID", "行番号", "行種別", "レシート上の表記", "表示用商品名",
   "数量", "行金額", "税込・税抜", "税率", "商品カテゴリ"
 ];
-const RECEIPT_TRIGGER_HANDLER = "importReceiptsFromDrive";
 
-function installReceiptImportTrigger() {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try {
-    getReceiptImportContext_();
-    if (!ScriptApp.getProjectTriggers().some(trigger =>
-      trigger.getHandlerFunction() === RECEIPT_TRIGGER_HANDLER)) {
-      ScriptApp.newTrigger(RECEIPT_TRIGGER_HANDLER).timeBased().everyMinutes(15).create();
-    }
-  } finally {
-    lock.releaseLock();
-  }
-}
-
+// 手動実行または Apps Script で設定した時間主導型トリガーから呼び出す。
 function importReceiptsFromDrive() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
