@@ -1,22 +1,98 @@
-// Apps Script エディタから実行する。プレビューは件数だけをログに出す。
+const MONTHLY_MIGRATION_YEAR_CELL = "D16";
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu("月次転記")
+    .addItem("プレビューして転記", "confirmMonthlyMigration")
+    .addItem("候補年を更新", "refreshMonthlyMigrationYears")
+    .addToUi();
+}
+
+function refreshMonthlyMigrationYears() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
+  const [year, month] = Utilities.formatDate(new Date(), timezone, "yyyy-MM").split("-").map(Number);
+  const years = monthlyMigrationYears_(readMonthlyMigrationSources_(spreadsheet, timezone), year, month);
+  const selector = spreadsheet.getSheetByName(SHEET_THOUBOKANRI).getRange(MONTHLY_MIGRATION_YEAR_CELL);
+  if (!years.length) {
+    selector.clearDataValidations().clearContent();
+    SpreadsheetApp.getUi().alert("転記元4シートに対象月の揃った年がありません。");
+    return;
+  }
+  selector.setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(years.map(String), true).setAllowInvalid(false).build());
+  if (!years.includes(Number(selector.getValue()))) selector.setValue(years[0]);
+}
+
+function confirmMonthlyMigration() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const year = Number(spreadsheet.getSheetByName(SHEET_THOUBOKANRI)
+    .getRange(MONTHLY_MIGRATION_YEAR_CELL).getValue());
+  try {
+    if (!Number.isInteger(year) || year < 1000 || year > 9999) {
+      throw new Error("帳簿管理の「転記対象年」を選択してください。");
+    }
+    const preview = migrateMonthlyActuals_(spreadsheet, year);
+    const message = [
+      year + "年1月〜" + preview.lastMonth + "月分",
+      "月次入力 " + preview.monthlyInputRows + "行／月次実績 " + preview.monthlyActualRows + "行",
+      ...(preview.includesCurrentMonth ? ["当月分には現時点の値が含まれます。"] : [])
+    ].join("\n");
+    if (!preview.monthlyInputRows && !preview.monthlyActualRows) {
+      ui.alert("月次転記", message + "\n追加する行はありません。", ui.ButtonSet.OK);
+      return;
+    }
+    if (ui.alert("月次転記の確認", message + "\n転記しますか？", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+    migrateMonthlyActuals_(spreadsheet, year, preview);
+    ui.alert("月次転記が完了しました。", message, ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert("月次転記", error.message, ui.ButtonSet.OK);
+  }
+}
+
+function readMonthlyMigrationSources_(spreadsheet, timezone) {
+  return [
+    readMigrationSource_(spreadsheet, SHEET_THOUBOKANRI, 7, timezone),
+    readMigrationSource_(spreadsheet, SHEET_SYUNYUKANRI, 10, timezone),
+    readMigrationSource_(spreadsheet, SHEET_SISYUTUKANRI, 28, timezone),
+    readMigrationSource_(spreadsheet, SHEET_ONLINE, 9, timezone)
+  ];
+}
+
+function monthlyMigrationYears_(sources, currentYear, currentMonth) {
+  const years = new Set(Array.from(sources[0].months.keys(), key => Number(key.slice(0, 4))));
+  return Array.from(years).filter(year => {
+    if (year > currentYear) return false;
+    const lastMonth = year === currentYear ? currentMonth : 12;
+    const months = Array.from({ length: lastMonth }, (_, index) =>
+      year + "-" + String(index + 1).padStart(2, "0"));
+    return sources.every(source => months.every(month => source.months.has(month)) &&
+      months.some(month => source.hasData(month)));
+  }).sort((a, b) => b - a);
+}
+
 function previewMonthlyActuals2026() {
-  return migrateMonthlyActuals2026_(false);
+  return migrateMonthlyActuals_(getSpreadsheet(), 2026);
 }
 
 function migrateMonthlyActuals2026() {
-  return migrateMonthlyActuals2026_(true);
+  const spreadsheet = getSpreadsheet();
+  const preview = migrateMonthlyActuals_(spreadsheet, 2026);
+  return migrateMonthlyActuals_(spreadsheet, 2026, preview);
 }
 
-function migrateMonthlyActuals2026_(write) {
+function migrateMonthlyActuals_(spreadsheet, year, approvedPreview) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const spreadsheet = getSpreadsheet();
     const timezone = spreadsheet.getSpreadsheetTimeZone();
-    const year = 2026;
     const [currentYear, currentMonth] = Utilities.formatDate(new Date(), timezone, "yyyy-MM")
       .split("-").map(Number);
-    const lastMonth = currentYear < year ? 0 : currentYear === year ? currentMonth : 12;
+    const lastMonth = currentYear === year ? currentMonth : 12;
+    const [ledger, income, expenses, online] = readMonthlyMigrationSources_(spreadsheet, timezone);
+    if (!monthlyMigrationYears_([ledger, income, expenses, online], currentYear, currentMonth).includes(year)) {
+      throw new Error("選択年の対象月が転記元の4シートに揃っていません。候補年を更新してください。");
+    }
     const settings = loadSheetSetting(spreadsheet).settingContents;
     const users = [
       ["USER_A", settings.USER_A_NAME],
@@ -27,10 +103,6 @@ function migrateMonthlyActuals2026_(write) {
       throw new Error("設定シートのユーザー名を確認してください。");
     }
 
-    const ledger = readMigrationSource2026_(spreadsheet, SHEET_THOUBOKANRI, 7);
-    const income = readMigrationSource2026_(spreadsheet, SHEET_SYUNYUKANRI, 10);
-    const expenses = readMigrationSource2026_(spreadsheet, SHEET_SISYUTUKANRI, 28);
-    const online = readMigrationSource2026_(spreadsheet, SHEET_ONLINE, 9);
     const inputRows = [];
     const actualRows = [];
     for (let month = 1; month <= lastMonth; month++) {
@@ -72,38 +144,47 @@ function migrateMonthlyActuals2026_(write) {
       }
     }
 
-    const input = planMigrationAppend2026_(spreadsheet, "月次入力",
-      ["対象月", "ユーザーID", "仮入金額", "実入金額"], 2, inputRows, timezone);
-    const actuals = planMigrationAppend2026_(spreadsheet, "月次実績",
-      ["対象月", "区分", "カテゴリ", "内訳", "金額"], 4, actualRows, timezone);
-    if (write) {
-      appendMigrationRows2026_(input);
-      appendMigrationRows2026_(actuals);
+    const input = planMigrationAppend_(spreadsheet, "月次入力",
+      ["対象月", "ユーザーID", "仮入金額", "実入金額"], 2, inputRows, timezone, year);
+    const actuals = planMigrationAppend_(spreadsheet, "月次実績",
+      ["対象月", "区分", "カテゴリ", "内訳", "金額"], 4, actualRows, timezone, year);
+    const summary = {
+      year,
+      lastMonth,
+      includesCurrentMonth: currentYear === year,
+      monthlyInputRows: input.rows.length,
+      monthlyActualRows: actuals.rows.length,
+      digest: Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+        JSON.stringify([input.rows, actuals.rows])).join(",")
+    };
+    if (approvedPreview) {
+      if (JSON.stringify(summary) !== JSON.stringify(approvedPreview)) {
+        throw new Error("転記予定が確認時から変わりました。もう一度プレビューしてください。");
+      }
+      appendMigrationRows_(input);
+      appendMigrationRows_(actuals);
       SpreadsheetApp.flush();
     }
-
-    const summary = {
-      year: year,
-      lastMonth: lastMonth,
-      preview: !write,
-      monthlyInputRows: input.rows.length,
-      monthlyActualRows: actuals.rows.length
-    };
-    Logger.log(JSON.stringify(summary));
     return summary;
   } finally {
     lock.releaseLock();
   }
 }
 
-function readMigrationSource2026_(spreadsheet, name, lastRow) {
+function readMigrationSource_(spreadsheet, name, lastRow, timezone) {
   const sheet = spreadsheet.getSheetByName(name);
   if (!sheet) throw new Error(name + "シートが見つかりません。");
-  const range = sheet.getRange(3, 1, lastRow - 2, 13);
+  const range = sheet.getRange(3, 1, lastRow - 2, sheet.getLastColumn());
   const values = range.getValues();
-  const months = new Map(values[0].slice(1).map((value, index) =>
-    [migrationMonthKey2026_(value, spreadsheet.getSpreadsheetTimeZone()), index + 1]));
-  if (months.size !== 12) throw new Error(name + "の年月見出しが重複しています。");
+  const months = new Map();
+  const duplicates = new Set();
+  values[0].slice(1).forEach((value, index) => {
+    const key = migrationMonthKey_(value, timezone, true);
+    if (!key) return;
+    if (months.has(key)) duplicates.add(key);
+    months.set(key, index + 1);
+  });
+  duplicates.forEach(key => months.delete(key));
 
   const rows = new Map();
   values.slice(1).forEach(row => {
@@ -113,6 +194,10 @@ function readMigrationSource2026_(spreadsheet, name, lastRow) {
   });
   return {
     labels: Array.from(rows.keys()),
+    months,
+    hasData(month) {
+      return Array.from(rows.values()).some(row => Number.isFinite(row[months.get(month)]));
+    },
     amount(label, month) {
       if (!months.has(month) || !rows.has(label)) {
         throw new Error(name + "の年月または項目が見つかりません。 " + month + " " + label);
@@ -126,14 +211,15 @@ function readMigrationSource2026_(spreadsheet, name, lastRow) {
   };
 }
 
-function migrationMonthKey2026_(value, timezone) {
+function migrationMonthKey_(value, timezone, optional = false) {
   if (value instanceof Date) return Utilities.formatDate(value, timezone, "yyyy-MM");
   const match = String(value).trim().match(/^(\d{4})[/-](0?[1-9]|1[0-2])$/);
+  if (!match && optional) return null;
   if (!match) throw new Error("対象月の形式を確認してください。");
   return match[1] + "-" + match[2].padStart(2, "0");
 }
 
-function planMigrationAppend2026_(spreadsheet, name, headers, keyColumns, candidates, timezone) {
+function planMigrationAppend_(spreadsheet, name, headers, keyColumns, candidates, timezone, year) {
   const sheet = spreadsheet.getSheetByName(name);
   if (!sheet) throw new Error(name + "シートが見つかりません。");
   const lastRow = sheet.getLastRow();
@@ -142,15 +228,15 @@ function planMigrationAppend2026_(spreadsheet, name, headers, keyColumns, candid
     throw new Error(name + "の見出しを確認してください。");
   }
   const keyFor = row => JSON.stringify([
-    migrationMonthKey2026_(row[0], timezone), ...row.slice(1, keyColumns)
+    migrationMonthKey_(row[0], timezone), ...row.slice(1, keyColumns)
   ]);
   const existing = new Map();
   values.slice(1).forEach(row => {
     if (row.every(value => value === "")) return;
-    const month = migrationMonthKey2026_(row[0], timezone);
-    if (!month.startsWith("2026-")) return;
+    const month = migrationMonthKey_(row[0], timezone);
+    if (!month.startsWith(year + "-")) return;
     const key = keyFor(row);
-    if (existing.has(key)) throw new Error(name + "に2026年の重複行があります。 " + key);
+    if (existing.has(key)) throw new Error(name + "に" + year + "年の重複行があります。 " + key);
     existing.set(key, row);
   });
 
@@ -166,7 +252,7 @@ function planMigrationAppend2026_(spreadsheet, name, headers, keyColumns, candid
   return { sheet: sheet, startRow: lastRow + 1, rows: rows, width: headers.length };
 }
 
-function appendMigrationRows2026_(plan) {
+function appendMigrationRows_(plan) {
   if (!plan.rows.length) return;
   const needed = plan.startRow + plan.rows.length - 1 - plan.sheet.getMaxRows();
   if (needed > 0) plan.sheet.insertRowsAfter(plan.sheet.getMaxRows(), needed);
