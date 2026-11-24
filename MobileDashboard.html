@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>家計簿</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #102641;
+    --paper: #fcf8f3;
+    --teal: #00766e;
+    --line: #ddd6ce;
+    --nav-height: 68px;
+    font: 16px/1.5 system-ui, "Hiragino Sans", "Yu Gothic", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ede8e2; color: var(--ink); }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--teal); outline-offset: -3px; }
+  button:disabled { cursor: default; color: #586678; }
+  h1, h2, p { margin: 0; }
+  .app { max-width: 520px; margin: auto; min-height: 100dvh; background: var(--paper); }
+  header { position: relative; text-align: center; border-bottom: 1px solid var(--line); padding: 10px 56px; }
+  h1 { font-size: 1.65rem; }
+  .settings { position: absolute; top: 5px; right: 12px; width: 44px; height: 44px; font-size: 1.45rem; }
+  main { padding: 0 12px calc(var(--nav-height) + env(safe-area-inset-bottom) + 16px); }
+  .notice { font-size: .75rem; text-align: center; color: #586678; padding-top: 6px; }
+  .month { display: flex; justify-content: center; align-items: center; gap: 12px; }
+  .month button { width: 44px; height: 44px; font-size: 1.8rem; color: var(--teal); }
+  #month-label { font-size: 1.35rem; font-weight: 800; }
+  .summary {
+    overflow: hidden; border-radius: 18px; padding: 12px 8px 8px; color: white;
+    background: radial-gradient(ellipse at top left, #40428f, transparent 65%),
+                linear-gradient(145deg, #1b2b69 14%, #00516a 62%, #009c87);
+  }
+  .balance { text-align: center; padding-bottom: 9px; font-weight: 700; }
+  #balance { display: block; font-size: clamp(2rem, 9vw, 2.9rem); line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; border-radius: 13px; overflow: hidden; }
+  .metric { text-align: left; padding: 7px 9px; color: var(--ink); min-width: 0; }
+  .income { background: #dff7f2; }
+  .expense { background: #fff0e5; }
+  .metric strong { display: block; font-size: clamp(1rem, 4.6vw, 1.45rem); overflow-wrap: anywhere; }
+  section + section { margin-top: 16px; }
+  .heading { display: flex; justify-content: space-between; align-items: center; min-height: 36px; gap: 8px; }
+  h2 { font-size: 1.13rem; }
+  .link { min-height: 44px; color: var(--teal); font-weight: 700; font-size: .85rem; }
+  .list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .list:empty { display: none; }
+  .list li + li { border-top: 1px solid var(--line); }
+  .row { width: 100%; min-height: 44px; display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; gap: 8px; align-items: center; text-align: left; padding: 7px 10px; }
+  .row .date, .row .amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row .title { overflow-wrap: anywhere; }
+  .chevron { color: #536170; }
+  .card { grid-template-columns: 38px minmax(0,1fr) auto; min-height: 55px; }
+  .card small { display: block; color: #526071; }
+  .icon { display: grid; place-items: center; border-radius: 10px; height: 36px; font-size: 1.25rem; font-weight: 700; }
+  .category { background: #d9f5eb; color: #006960; }
+  .installment { background: #ffedce; color: #8a500b; }
+  .comparison { background: #eee3fb; color: #593b91; }
+  nav { position: fixed; inset: auto 0 0; max-width: 520px; margin: auto; background: var(--paper); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, 1fr); padding-bottom: env(safe-area-inset-bottom); }
+  nav button { min-height: var(--nav-height); font-size: .82rem; font-weight: 700; }
+  nav [aria-current] { color: var(--teal); }
+  nav svg { width: 25px; height: 25px; display: block; margin: 0 auto 2px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .camera { display: block; width: 44px; padding: 3px; margin: 0 auto 2px; border-radius: 8px; background: var(--teal); color: white; }
+  .camera svg { margin: auto; }
+  dialog { color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 14px; width: min(92vw, 460px); max-height: 80dvh; padding: 16px; }
+  dialog::backdrop { background: #10264180; }
+  #dialog-content { margin: 12px 0; }
+  .setting-row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+  .setting-row label { flex: 1; }
+  .setting-row button { min-width: 44px; min-height: 44px; }
+  .empty { padding: 10px; color: #526071; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>家計簿</h1>
+    <button class="settings" id="settings" type="button" aria-label="ホーム表示設定">⚙</button>
+  </header>
+  <main>
+    <p class="notice">サンプルデータ</p>
+    <div class="month">
+      <button id="previous" type="button" aria-label="前月">‹</button>
+      <span id="month-label" aria-live="polite"></span>
+      <button id="next" type="button" aria-label="翌月">›</button>
+    </div>
+    <section class="summary" aria-label="月の収支">
+      <div class="balance">収支差額 <strong id="balance"></strong></div>
+      <div class="metrics">
+        <button class="metric income" id="income" type="button">収入 ›<strong id="income-total"></strong></button>
+        <button class="metric expense" id="expense" type="button">支出 ›<strong id="expense-total"></strong></button>
+      </div>
+    </section>
+    <section aria-labelledby="recent-heading">
+      <div class="heading">
+        <h2 id="recent-heading">最近の明細</h2>
+        <button class="link" id="all" type="button">すべて見る ›</button>
+      </div>
+      <ul class="list" id="recent"></ul>
+      <p class="empty" id="empty" hidden>この月のサンプル明細はありません。</p>
+    </section>
+    <section id="custom-section" aria-labelledby="custom-heading">
+      <div class="heading"><h2 id="custom-heading">カスタマイズ</h2></div>
+      <ul class="list" id="cards"></ul>
+    </section>
+  </main>
+  <nav aria-label="メインメニュー">
+    <button type="button" id="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8M6 10v11h5v-6h3v6h4V10"/></svg>ホーム</button>
+    <button type="button" disabled><span class="camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h5l2-3h4l2 3h5v13H3z"/><circle cx="12" cy="13" r="4"/></svg></span>レシート登録</button>
+    <button type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 3"/></svg>登録履歴</button>
+  </nav>
+</div>
+<dialog id="detail" aria-labelledby="dialog-title">
+  <h2 id="dialog-title"></h2>
+  <div id="dialog-content"></div>
+  <form method="dialog"><button class="link">閉じる</button></form>
+</dialog>
+<script>
+  'use strict';
+
+  // 画面確認用。実データ接続時に帳簿と同じ月判定・集計条件で取得する。
+  const demoMonth = 2026 * 12 + 10;
+  const demoDay = 24;
+  const sampleRows = {
+    [demoMonth]: [
+      { day: 24, name: 'スーパー', amount: -3280, category: '食費' },
+      { day: 23, name: 'ドラッグストア', amount: -1460, category: '日用品' },
+      { day: 22, name: '電気料金', amount: -8720, category: '光熱費' },
+      { day: 21, name: 'カフェ', amount: -680, category: '食費' },
+      { day: 20, name: '昼食', amount: -1250, category: '食費' },
+      { day: 18, name: '食料品まとめ買い', amount: -37590, category: '食費' },
+      { day: 15, name: '給与', amount: 284000, category: '給与' },
+      { day: 10, name: '住居費', amount: -160000, category: '住居費' },
+      { day: 6, name: '交通費', amount: -22670, category: '交通費' }
+    ],
+    [demoMonth - 1]: [
+      { day: 24, name: '支出合計（サンプル）', amount: -248050, category: 'その他' }
+    ]
+  };
+  const sampleInstallments = {
+    [demoMonth]: [{ name: '家電', amount: 16500 }]
+  };
+  const cardDefinitions = {
+    category: { title: 'カテゴリ別支出', icon: '≡' },
+    installment: { title: '分割払い', icon: '▦' },
+    comparison: { title: '前月比', icon: '↗' }
+  };
+  const cardIds = Object.keys(cardDefinitions);
+  const preferenceKey = 'kakeibo-dashboard-cards';
+  const byId = id => document.getElementById(id);
+  const yen = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' });
+  const formatYen = amount => yen.format(amount).replace('￥', '¥');
+  const monthNumber = month => month % 12 + 1;
+  const monthName = month => Math.floor(month / 12) + '年' + monthNumber(month) + '月';
+  const dateLabel = (month, day) => monthNumber(month) + '/' + String(day).padStart(2, '0');
+  let selectedMonth = demoMonth;
+  let cards = cardIds.map(id => ({ id, visible: true }));
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(preferenceKey));
+    if (Array.isArray(saved) && saved.length === cards.length &&
+        new Set(saved.map(card => card.id)).size === cards.length &&
+        saved.every(card => cardIds.includes(card.id) && typeof card.visible === 'boolean')) {
+      cards = saved;
+    }
+  } catch {
+    // ブラウザーの保存領域が使えない場合も画面を表示する。
+  }
+
+  function element(tag, className, text) {
+    const node = document.createElement(tag);
+    node.className = className;
+    node.textContent = text;
+    return node;
+  }
+
+  function sum(rows) {
+    return rows.reduce((total, row) => total + row.amount, 0);
+  }
+
+  function rowsFor(month) {
+    return sampleRows[month] || [];
+  }
+
+  function listItem(list, css, children, action) {
+    const item = document.createElement('li');
+    const button = element('button', 'row ' + css, '');
+    button.type = 'button';
+    const arrow = element('span', 'chevron', '›');
+    arrow.setAttribute('aria-hidden', 'true');
+    button.append(...children, arrow);
+    button.addEventListener('click', action);
+    item.append(button);
+    list.append(item);
+  }
+
+  function openDialog(title, content) {
+    byId('dialog-title').textContent = title;
+    byId('dialog-content').replaceChildren(content);
+    if (!byId('detail').open) byId('detail').showModal();
+  }
+
+  function transactionList(list, rows, month) {
+    list.replaceChildren();
+    for (const row of rows) {
+      listItem(list, '', [
+        element('span', 'date', dateLabel(month, row.day)),
+        element('span', 'title', row.name),
+        element('strong', 'amount', formatYen(row.amount))
+      ], () => openDialog(row.name, element('p', '', [
+        monthName(month) + row.day + '日', row.category, formatYen(row.amount)
+      ].join('　'))));
+    }
+  }
+
+  function showTransactions(rows, month, title) {
+    const content = document.createElement('div');
+    content.append(element('p', 'empty', rows.length
+      ? rows.length + '件　合計 ' + formatYen(sum(rows))
+      : '該当するサンプル明細はありません。'));
+    const list = element('ul', 'list', '');
+    transactionList(list, rows, month);
+    content.append(list);
+    openDialog(title, content);
+  }
+
+  function renderSettings() {
+    const form = document.createElement('div');
+    cards.forEach((card, index) => {
+      const row = element('div', 'setting-row', '');
+      const title = cardDefinitions[card.id].title;
+      const label = element('label', '', title);
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = card.visible;
+      checkbox.addEventListener('change', () => {
+        card.visible = checkbox.checked;
+        saveSettings();
+      });
+      label.prepend(checkbox, ' ');
+      row.append(label);
+      for (const direction of [-1, 1]) {
+        const target = index + direction;
+        const move = element('button', '', direction < 0 ? '↑' : '↓');
+        move.type = 'button';
+        move.setAttribute('aria-label', title + (direction < 0 ? 'を上へ移動' : 'を下へ移動'));
+        move.disabled = target < 0 || target >= cards.length;
+        move.addEventListener('click', () => {
+          [cards[index], cards[target]] = [cards[target], cards[index]];
+          saveSettings();
+          renderSettings();
+        });
+        row.append(move);
+      }
+      form.append(row);
+    });
+    openDialog('ホーム表示設定', form);
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(preferenceKey, JSON.stringify(cards));
+    } catch {
+      // 保存できない場合も現在の画面に反映する。
+    }
+    render();
+  }
+
+  function render() {
+    const month = selectedMonth;
+    const rows = rowsFor(month);
+    const income = rows.filter(row => row.amount > 0);
+    const expense = rows.filter(row => row.amount < 0);
+    const previousExpense = rowsFor(month - 1).filter(row =>
+      row.amount < 0 && (month !== demoMonth || row.day <= demoDay));
+    const installments = sampleInstallments[month] || [];
+    const balance = sum(rows);
+
+    byId('month-label').textContent = monthName(month);
+    byId('balance').textContent = (balance > 0 ? '+' : '') + formatYen(balance);
+    byId('income-total').textContent = formatYen(sum(income));
+    byId('expense-total').textContent = formatYen(-sum(expense));
+    byId('income').onclick = () => showTransactions(income, month, monthName(month) + 'の収入');
+    byId('expense').onclick = () => showTransactions(expense, month, monthName(month) + 'の支出');
+    byId('all').onclick = () => showTransactions(rows, month, monthName(month) + 'の明細');
+    transactionList(byId('recent'), rows.slice(0, 5), month);
+    byId('empty').hidden = rows.length > 0;
+
+    const groups = new Map();
+    for (const row of expense) {
+      if (!groups.has(row.category)) groups.set(row.category, []);
+      groups.get(row.category).push(row);
+    }
+    const categories = [...groups].sort((a, b) => sum(a[1]) - sum(b[1]));
+    const difference = sum(previousExpense) - sum(expense);
+    const hasComparison = rows.length > 0 && rowsFor(month - 1).length > 0;
+    const period = month === demoMonth ? '前月同日まで' : '前月';
+    const summaries = {
+      category: categories.length ? categories[0][0] + ' ' + formatYen(-sum(categories[0][1])) : '対象明細なし',
+      installment: installments.length ? '支払予定 ' + formatYen(sum(installments)) : '支払予定なし',
+      comparison: hasComparison
+        ? period + 'より ' + (difference === 0 ? '増減なし' : formatYen(Math.abs(difference)) + (difference > 0 ? '増' : '減'))
+        : '比較データなし'
+    };
+    const actions = {
+      category: () => {
+        const list = element('ul', 'list', '');
+        for (const [name, items] of categories) {
+          listItem(list, '', [
+            element('span', '', ''),
+            element('span', 'title', name),
+            element('strong', 'amount', formatYen(-sum(items)))
+          ], () => showTransactions(items, month, name));
+        }
+        openDialog('カテゴリ別支出', categories.length ? list : element('p', '', summaries.category));
+      },
+      installment: () => {
+        const list = element('ul', '', '');
+        for (const item of installments) {
+          list.append(element('li', '', item.name + '　' + formatYen(item.amount)));
+        }
+        openDialog('分割払いの支払予定', installments.length ? list : element('p', '', summaries.installment));
+      },
+      comparison: () => {
+        const content = document.createElement('div');
+        content.append(element('p', '', summaries.comparison));
+        if (hasComparison) {
+          content.append(element('p', '', monthName(month) + ' ' + formatYen(-sum(expense))));
+          content.append(element('p', '', period + ' ' + formatYen(-sum(previousExpense))));
+        }
+        openDialog('前月比', content);
+      }
+    };
+
+    const cardList = byId('cards');
+    cardList.replaceChildren();
+    byId('custom-section').hidden = !cards.some(card => card.visible);
+    for (const { id, visible } of cards) {
+      if (!visible) continue;
+      const icon = element('span', 'icon ' + id, cardDefinitions[id].icon);
+      icon.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.append(element('strong', '', cardDefinitions[id].title), element('small', '', summaries[id]));
+      listItem(cardList, 'card', [icon, label], actions[id]);
+    }
+  }
+
+  byId('previous').addEventListener('click', () => { selectedMonth -= 1; render(); });
+  byId('next').addEventListener('click', () => { selectedMonth += 1; render(); });
+  byId('home').addEventListener('click', () => window.scrollTo(0, 0));
+  byId('settings').addEventListener('click', renderSettings);
+  render();
+</script>
+</body>
+</html>
