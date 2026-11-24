@@ -1,5 +1,3 @@
-const MONTHLY_MIGRATION_YEAR_CELL = "D16";
-
 function onOpen() {
   SpreadsheetApp.getUi().createMenu("月次転記")
     .addItem("プレビューして転記", "confirmMonthlyMigration")
@@ -12,7 +10,7 @@ function refreshMonthlyMigrationYears() {
   const timezone = spreadsheet.getSpreadsheetTimeZone();
   const [year, month] = Utilities.formatDate(new Date(), timezone, "yyyy-MM").split("-").map(Number);
   const years = monthlyMigrationYears_(readMonthlyMigrationSources_(spreadsheet, timezone), year, month);
-  const selector = spreadsheet.getSheetByName(SHEET_THOUBOKANRI).getRange(MONTHLY_MIGRATION_YEAR_CELL);
+  const selector = getMonthlyMigrationYearSelector_(spreadsheet);
   if (!years.length) {
     selector.clearDataValidations().clearContent();
     SpreadsheetApp.getUi().alert("転記元4シートに対象月の揃った年がありません。");
@@ -26,12 +24,8 @@ function refreshMonthlyMigrationYears() {
 function confirmMonthlyMigration() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
-  const year = Number(spreadsheet.getSheetByName(SHEET_THOUBOKANRI)
-    .getRange(MONTHLY_MIGRATION_YEAR_CELL).getValue());
   try {
-    if (!Number.isInteger(year) || year < 1000 || year > 9999) {
-      throw new Error("帳簿管理の「転記対象年」を選択してください。");
-    }
+    const year = getMonthlyMigrationYear_(spreadsheet);
     const preview = migrateMonthlyActuals_(spreadsheet, year);
     const message = [
       year + "年1月〜" + preview.lastMonth + "月分",
@@ -71,14 +65,31 @@ function monthlyMigrationYears_(sources, currentYear, currentMonth) {
   }).sort((a, b) => b - a);
 }
 
-function previewMonthlyActuals2026() {
-  return migrateMonthlyActuals_(getSpreadsheet(), 2026);
+function getMonthlyMigrationYearSelector_(spreadsheet) {
+  const sheet = spreadsheet.getSheetByName(SHEET_THOUBOKANRI);
+  if (!sheet) throw new Error(SHEET_THOUBOKANRI + "シートが見つかりません。");
+  return sheet.getRange(MONTHLY_MIGRATION_YEAR_CELL);
 }
 
-function migrateMonthlyActuals2026() {
+function getMonthlyMigrationYear_(spreadsheet) {
+  const value = getMonthlyMigrationYearSelector_(spreadsheet).getValue();
+  if ((typeof value !== "number" && typeof value !== "string") ||
+      !/^\d{4}$/.test(String(value).trim()) || Number(value) < 1000) {
+    throw new Error("帳簿管理の「転記対象年」を選択してください。");
+  }
+  return Number(value);
+}
+
+function previewMonthlyActuals() {
   const spreadsheet = getSpreadsheet();
-  const preview = migrateMonthlyActuals_(spreadsheet, 2026);
-  return migrateMonthlyActuals_(spreadsheet, 2026, preview);
+  return migrateMonthlyActuals_(spreadsheet, getMonthlyMigrationYear_(spreadsheet));
+}
+
+function migrateMonthlyActuals() {
+  const spreadsheet = getSpreadsheet();
+  const year = getMonthlyMigrationYear_(spreadsheet);
+  const preview = migrateMonthlyActuals_(spreadsheet, year);
+  return migrateMonthlyActuals_(spreadsheet, year, preview);
 }
 
 function migrateMonthlyActuals_(spreadsheet, year, approvedPreview) {
