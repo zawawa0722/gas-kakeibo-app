@@ -80,13 +80,13 @@
     <button class="settings" id="settings" type="button" aria-label="ホーム表示設定">⚙</button>
   </header>
   <main>
-    <p class="notice">サンプルデータ</p>
+    <p class="notice" id="data-status" role="status">サンプルデータ</p>
     <div class="month">
       <button id="previous" type="button" aria-label="前月">‹</button>
       <span id="month-label" aria-live="polite"></span>
       <button id="next" type="button" aria-label="翌月">›</button>
     </div>
-    <section class="summary" aria-label="月の収支">
+    <section id="summary" class="summary" aria-label="月の収支">
       <div class="balance">収支差額 <strong id="balance"></strong></div>
       <div class="metrics">
         <button class="metric income" id="income" type="button">収入 ›<strong id="income-total"></strong></button>
@@ -155,7 +155,13 @@
   const monthNumber = month => month % 12 + 1;
   const monthName = month => Math.floor(month / 12) + '年' + monthNumber(month) + '月';
   const dateLabel = (month, day) => monthNumber(month) + '/' + String(day).padStart(2, '0');
-  let selectedMonth = demoMonth;
+  const live = typeof google !== 'undefined' && Boolean(google.script?.run);
+  const now = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date());
+  const [year, month] = now.split('-').map(Number);
+  const currentMonth = year * 12 + month - 1;
+  const liveMonths = new Map();
+  let selectedMonth = live ? currentMonth : demoMonth;
+  let requestId = 0;
   let cards = cardIds.map(id => ({ id, visible: true }));
 
   try {
@@ -181,7 +187,7 @@
   }
 
   function rowsFor(month) {
-    return sampleRows[month] || [];
+    return (live ? liveMonths.get(month)?.rows : sampleRows[month]) || [];
   }
 
   function listItem(list, css, children, action) {
@@ -206,11 +212,11 @@
     list.replaceChildren();
     for (const row of rows) {
       listItem(list, '', [
-        element('span', 'date', dateLabel(month, row.day)),
+        element('span', 'date', row.day ? dateLabel(month, row.day) : row.kind),
         element('span', 'title', row.name),
         element('strong', 'amount', formatYen(row.amount))
       ], () => openDialog(row.name, element('p', '', [
-        monthName(month) + row.day + '日', row.category, formatYen(row.amount)
+        monthName(month) + (row.day ? row.day + '日' : ''), row.category, formatYen(row.amount)
       ].join('　'))));
     }
   }
@@ -218,8 +224,8 @@
   function showTransactions(rows, month, title) {
     const content = document.createElement('div');
     content.append(element('p', 'empty', rows.length
-      ? rows.length + '件　合計 ' + formatYen(sum(rows))
-      : '該当するサンプル明細はありません。'));
+      ? rows.length + '件　合計 ' + formatYen(rows.length && rows.every(row => row.kind === '支出') ? -sum(rows) : sum(rows))
+      : '該当する内訳はありません。'));
     const list = element('ul', 'list', '');
     transactionList(list, rows, month);
     content.append(list);
@@ -271,14 +277,19 @@
   function render() {
     const month = selectedMonth;
     const rows = rowsFor(month);
-    const income = rows.filter(row => row.amount > 0);
-    const expense = rows.filter(row => row.amount < 0);
+    const income = rows.filter(row => live ? row.kind === '収入' : row.amount > 0);
+    const expense = rows.filter(row => live ? row.kind === '支出' : row.amount < 0);
     const previousExpense = rowsFor(month - 1).filter(row =>
-      row.amount < 0 && (month !== demoMonth || row.day <= demoDay));
+      live ? row.kind === '支出' : row.amount < 0 && (month !== demoMonth || row.day <= demoDay));
     const installments = sampleInstallments[month] || [];
     const balance = sum(rows);
 
     byId('month-label').textContent = monthName(month);
+    const available = !live || liveMonths.get(month)?.available;
+    byId('summary').hidden = !available;
+    byId('all').disabled = !available;
+    byId('empty').textContent = live ? 'この月の内訳はありません。' : 'この月のサンプル明細はありません。';
+    byId('recent-heading').textContent = live ? '月別内訳' : '最近の明細';
     byId('balance').textContent = (balance > 0 ? '+' : '') + formatYen(balance);
     byId('income-total').textContent = formatYen(sum(income));
     byId('expense-total').textContent = formatYen(-sum(expense));
@@ -295,12 +306,12 @@
     }
     const categories = [...groups].sort((a, b) => sum(a[1]) - sum(b[1]));
     const difference = sum(previousExpense) - sum(expense);
-    const hasComparison = rows.length > 0 && rowsFor(month - 1).length > 0;
-    const period = month === demoMonth ? '前月同日まで' : '前月';
+    const hasComparison = live ? month < currentMonth && Boolean(available && liveMonths.get(month - 1)?.available) : rows.length > 0 && rowsFor(month - 1).length > 0;
+    const period = !live && month === demoMonth ? '前月同日まで' : '前月';
     const summaries = {
       category: categories.length ? categories[0][0] + ' ' + formatYen(-sum(categories[0][1])) : '対象明細なし',
-      installment: installments.length ? '支払予定 ' + formatYen(sum(installments)) : '支払予定なし',
-      comparison: hasComparison
+      installment: live ? '実データ接続準備中' : installments.length ? '支払予定 ' + formatYen(sum(installments)) : '支払予定なし',
+      comparison: live && month === currentMonth ? '月途中の比較データなし' : hasComparison
         ? period + 'より ' + (difference === 0 ? '増減なし' : formatYen(Math.abs(difference)) + (difference > 0 ? '増' : '減'))
         : '比較データなし'
     };
@@ -347,11 +358,54 @@
     }
   }
 
-  byId('previous').addEventListener('click', () => { selectedMonth -= 1; render(); });
-  byId('next').addEventListener('click', () => { selectedMonth += 1; render(); });
+  function fetchMonth(month) {
+    const key = Math.floor(month / 12) + '-' + String(monthNumber(month)).padStart(2, '0');
+    return new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getMobileDashboardMonth(key);
+    });
+  }
+
+  async function refresh() {
+    if (!live) {
+      render();
+      return;
+    }
+    const month = selectedMonth;
+    const request = ++requestId;
+    const status = byId('data-status');
+    status.textContent = '読み込み中…';
+    byId('month-label').textContent = monthName(month);
+    byId('summary').hidden = true;
+    byId('all').disabled = true;
+    byId('recent').replaceChildren();
+    byId('empty').hidden = true;
+    byId('custom-section').hidden = true;
+    byId('settings').disabled = true;
+    try {
+      const data = await fetchMonth(month);
+      if (request !== requestId) return;
+      liveMonths.set(month, data);
+      status.textContent = data.available ? '' : 'この月の家計簿データはありません。';
+      render();
+      if (month < currentMonth && data.available) {
+        const previous = await fetchMonth(month - 1).catch(() => null);
+        if (previous && request === requestId) {
+          liveMonths.set(month - 1, previous);
+          render();
+        }
+      }
+    } catch (error) {
+      if (request === requestId) status.textContent = error?.message || '家計簿を読み込めませんでした。';
+    } finally {
+      if (request === requestId) byId('settings').disabled = !liveMonths.has(month);
+    }
+  }
+
+  byId('previous').addEventListener('click', () => { selectedMonth -= 1; refresh(); });
+  byId('next').addEventListener('click', () => { selectedMonth += 1; refresh(); });
   byId('home').addEventListener('click', () => window.scrollTo(0, 0));
   byId('settings').addEventListener('click', renderSettings);
-  render();
+  refresh();
 </script>
 </body>
 </html>

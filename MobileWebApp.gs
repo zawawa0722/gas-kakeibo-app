@@ -3,3 +3,59 @@ function doGet() {
     .setTitle("家計簿")
     .addMetaTag("viewport", "width=device-width, initial-scale=1, viewport-fit=cover");
 }
+
+// 実データはウェブアプリをデプロイした本人にだけ返す。
+function getMobileDashboardMonth(month) {
+  const activeEmail = Session.getActiveUser().getEmail();
+  if (!activeEmail || activeEmail !== Session.getEffectiveUser().getEmail()) {
+    throw new Error("家計簿の所有者アカウントで開いてください。");
+  }
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("対象月が無効です。");
+
+  const spreadsheet = getSpreadsheet();
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
+  const currentYear = Utilities.formatDate(new Date(), timezone, "yyyy");
+  const rows = [];
+  const addRow = (kind, category, detail, amount) => {
+    if (amount === "" || amount === 0) return;
+    if (!Number.isFinite(amount) || !["収入", "支出"].includes(kind)) {
+      throw new Error("月別内訳の区分または金額を確認してください。");
+    }
+    rows.push({ kind, category, name: detail || category, amount: kind === "支出" ? -amount : amount });
+  };
+
+  if (month.startsWith(currentYear + "-")) {
+    const [ledger, income, expense, online] = readMonthlyMigrationSources_(spreadsheet, timezone);
+    if (!ledger.months.has(month)) return { rows, available: false };
+    for (const label of income.labels.filter(label => label !== "収入総額")) {
+      addRow("収入", label, "", income.amount(label, month));
+    }
+    for (const label of expense.labels.filter(label => !["支出総額", "オンライン"].includes(label))) {
+      addRow("支出", label, "", expense.amount(label, month));
+    }
+    for (const label of online.labels) {
+      addRow("支出", "オンライン", label, online.amount(label, month));
+    }
+    const total = kind => rows.filter(row => row.kind === kind)
+      .reduce((sum, row) => sum + row.amount, 0);
+    if (total("収入") !== (ledger.amount("収入総額", month) || 0) ||
+        -total("支出") !== (ledger.amount("支出総額", month) || 0)) {
+      throw new Error("帳簿管理の合計と月別内訳が一致しません。");
+    }
+    return { rows, available: true };
+  }
+
+  const archive = spreadsheet.getSheetByName("月次実績");
+  if (!archive) throw new Error("月次実績シートが見つかりません。");
+  const [headers, ...actuals] = archive.getDataRange().getValues();
+  if (!["対象月", "区分", "カテゴリ", "内訳", "金額"].every((label, index) => headers[index] === label)) {
+    throw new Error("月次実績シートの見出しを確認してください。");
+  }
+  let available = false;
+  for (const [date, kind, category, detail, amount] of actuals) {
+    if (migrationMonthKey_(date, timezone, true) !== month) continue;
+    available = true;
+    addRow(kind, String(category), String(detail || ""), amount);
+  }
+  return { rows, available };
+}
