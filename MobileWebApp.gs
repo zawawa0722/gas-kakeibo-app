@@ -73,10 +73,16 @@ function getMobileDashboardTransactions(month) {
   const folders = DriveApp.getFoldersByName("ワンバンク");
   if (!folders.hasNext()) return [];
   const filename = "ワンバンク支出_" + month.slice(0, 4) + ".csv";
-  const files = folders.next().getFilesByName(filename);
-  if (!files.hasNext()) return [];
-  const file = files.next();
-  if (files.hasNext()) throw new Error("同じ名前のワンバンクCSVが複数あります。");
+  const files = folders.next().getFiles();
+  const normalizedName = normalizeString(filename);
+  let file = null;
+  while (files.hasNext()) {
+    const candidate = files.next();
+    if (normalizeString(candidate.getName()) !== normalizedName) continue;
+    if (file) throw new Error("同じ名前のワンバンクCSVが複数あります。");
+    file = candidate;
+  }
+  if (!file) return [];
 
   const rows = Utilities.parseCsv(file.getBlob().getDataAsString().replace(/^\uFEFF/, ""));
   const transactions = [];
