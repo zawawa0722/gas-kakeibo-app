@@ -25,8 +25,12 @@ function getMobileDashboardMonth(month) {
   };
 
   if (month.startsWith(currentYear + "-")) {
-    const [ledger, income, expense, online] = readMonthlyMigrationSources_(spreadsheet, timezone);
+    // 帳簿管理の収入総額・支出総額は8〜9行目にある。
+    const ledger = readMigrationSource_(spreadsheet, SHEET_THOUBOKANRI, 9, timezone);
     if (!ledger.months.has(month)) return { rows, available: false };
+    const income = readMigrationSource_(spreadsheet, SHEET_SYUNYUKANRI, 10, timezone);
+    const expense = readMigrationSource_(spreadsheet, SHEET_SISYUTUKANRI, 28, timezone);
+    const online = readMigrationSource_(spreadsheet, SHEET_ONLINE, 9, timezone);
     for (const label of income.labels.filter(label => label !== "収入総額")) {
       addRow("収入", label, "", income.amount(label, month));
     }
