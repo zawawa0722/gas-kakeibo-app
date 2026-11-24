@@ -160,6 +160,8 @@
   const [year, month] = now.split('-').map(Number);
   const currentMonth = year * 12 + month - 1;
   const liveMonths = new Map();
+  let recentTransactions = [];
+  let recentError = false;
   let selectedMonth = live ? currentMonth : demoMonth;
   let requestId = 0;
   let cards = cardIds.map(id => ({ id, visible: true }));
@@ -287,17 +289,18 @@
     byId('month-label').textContent = monthName(month);
     const available = !live || liveMonths.get(month)?.available;
     byId('summary').hidden = !available;
-    byId('all').disabled = !available;
-    byId('empty').textContent = live ? 'この月の内訳はありません。' : 'この月のサンプル明細はありません。';
-    byId('recent-heading').textContent = live ? '月別内訳' : '最近の明細';
+    const recentRows = live ? recentTransactions : rows;
+    byId('all').disabled = !recentRows.length;
+    byId('empty').textContent = recentError ? 'CSV明細を読み込めませんでした。'
+      : live ? '取り込み済みの明細はありません。' : 'この月のサンプル明細はありません。';
     byId('balance').textContent = (balance > 0 ? '+' : '') + formatYen(balance);
     byId('income-total').textContent = formatYen(sum(income));
     byId('expense-total').textContent = formatYen(-sum(expense));
     byId('income').onclick = () => showTransactions(income, month, monthName(month) + 'の収入');
     byId('expense').onclick = () => showTransactions(expense, month, monthName(month) + 'の支出');
-    byId('all').onclick = () => showTransactions(rows, month, monthName(month) + 'の明細');
-    transactionList(byId('recent'), rows.slice(0, 5), month);
-    byId('empty').hidden = rows.length > 0;
+    byId('all').onclick = () => showTransactions(recentRows, month, monthName(month) + 'の明細');
+    transactionList(byId('recent'), recentRows.slice(0, 5), month);
+    byId('empty').hidden = recentRows.length > 0;
 
     const groups = new Map();
     for (const row of expense) {
@@ -365,6 +368,13 @@
     });
   }
 
+  function fetchTransactions(month) {
+    const key = Math.floor(month / 12) + '-' + String(monthNumber(month)).padStart(2, '0');
+    return new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getMobileDashboardTransactions(key);
+    });
+  }
+
   async function refresh() {
     if (!live) {
       render();
@@ -382,9 +392,14 @@
     byId('custom-section').hidden = true;
     byId('settings').disabled = true;
     try {
-      const data = await fetchMonth(month);
+      const [data, transactions] = await Promise.all([
+        fetchMonth(month),
+        fetchTransactions(month).catch(() => null)
+      ]);
       if (request !== requestId) return;
       liveMonths.set(month, data);
+      recentTransactions = transactions || [];
+      recentError = transactions === null;
       status.textContent = data.available ? '' : 'この月の家計簿データはありません。';
       render();
       if (month < currentMonth && data.available) {
