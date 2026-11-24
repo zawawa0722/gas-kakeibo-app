@@ -6,11 +6,7 @@ function doGet() {
 
 // 実データはウェブアプリをデプロイした本人にだけ返す。
 function getMobileDashboardMonth(month) {
-  const activeEmail = Session.getActiveUser().getEmail();
-  if (!activeEmail || activeEmail !== Session.getEffectiveUser().getEmail()) {
-    throw new Error("家計簿の所有者アカウントで開いてください。");
-  }
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("対象月が無効です。");
+  validateMobileDashboardRequest_(month);
 
   const spreadsheet = getSpreadsheet();
   const timezone = spreadsheet.getSpreadsheetTimeZone();
@@ -62,4 +58,44 @@ function getMobileDashboardMonth(month) {
     addRow(kind, String(category), String(detail || ""), amount);
   }
   return { rows, available };
+}
+
+function validateMobileDashboardRequest_(month) {
+  const activeEmail = Session.getActiveUser().getEmail();
+  if (!activeEmail || activeEmail !== Session.getEffectiveUser().getEmail()) {
+    throw new Error("家計簿の所有者アカウントで開いてください。");
+  }
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("対象月が無効です。");
+}
+
+function getMobileDashboardTransactions(month) {
+  validateMobileDashboardRequest_(month);
+  const folders = DriveApp.getFoldersByName("ワンバンク");
+  if (!folders.hasNext()) return [];
+  const filename = "ワンバンク支出_" + month.slice(0, 4) + ".csv";
+  const files = folders.next().getFilesByName(filename);
+  if (!files.hasNext()) return [];
+  const file = files.next();
+  if (files.hasNext()) throw new Error("同じ名前のワンバンクCSVが複数あります。");
+
+  const rows = Utilities.parseCsv(file.getBlob().getDataAsString().replace(/^\uFEFF/, ""));
+  const transactions = [];
+  for (const row of rows) {
+    if (row.length !== 8 || row[COL_VALID].trim() !== "1") continue;
+    const date = row[0].trim().match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?(?:\s|$)/);
+    if (!date || date[1] + "-" + date[2].padStart(2, "0") !== month) continue;
+    const day = Number(date[3]);
+    const daysInMonth = new Date(Date.UTC(Number(date[1]), Number(date[2]), 0)).getUTCDate();
+    const name = row[COL_DESC].trim();
+    const rawAmount = row[COL_AMOUNT].trim();
+    const amount = Number(rawAmount);
+    if (day < 1 || day > daysInMonth || !name || !rawAmount || !Number.isFinite(amount)) continue;
+
+    const time = Number(date[4] || 0) * 3600 + Number(date[5] || 0) * 60 + Number(date[6] || 0);
+    transactions.push({
+      day, time, name, amount: -Math.abs(amount), kind: "支出", category: row[COL_CATEGORY].trim()
+    });
+  }
+  transactions.sort((a, b) => b.day - a.day || b.time - a.time);
+  return transactions.map(({ time, ...transaction }) => transaction);
 }
