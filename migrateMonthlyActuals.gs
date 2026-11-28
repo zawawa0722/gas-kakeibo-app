@@ -1,11 +1,37 @@
 function migrateMonthlyActuals() {
-  const spreadsheet = getSpreadsheet();
-  const timezone = spreadsheet.getSpreadsheetTimeZone();
-  const [currentYear, currentMonth] = Utilities.formatDate(new Date(), timezone, "yyyy-MM")
-    .split("-").map(Number);
-  const year = currentMonth === 1 ? currentYear - 1 : currentYear;
-  const month = currentMonth === 1 ? 12 : currentMonth - 1;
-  const monthKey = year + "-" + String(month).padStart(2, "0");
+  let monthKey;
+  let result;
+  try {
+    const spreadsheet = getSpreadsheet();
+    const timezone = spreadsheet.getSpreadsheetTimeZone();
+    const [currentYear, currentMonth] = Utilities.formatDate(new Date(), timezone, "yyyy-MM")
+      .split("-").map(Number);
+    const year = currentMonth === 1 ? currentYear - 1 : currentYear;
+    const month = currentMonth === 1 ? 12 : currentMonth - 1;
+    monthKey = year + "-" + String(month).padStart(2, "0");
+    result = transferMonthlyActuals_(spreadsheet, timezone, monthKey);
+  } catch (error) {
+    try {
+      GmailApp.sendEmail(EMAIL_PRIMARY, "【家計簿】月次転記に失敗",
+        "対象月: " + (monthKey || "取得できませんでした") + "\n原因: " + error.message);
+    } catch (notificationError) {
+      console.error("月次転記の失敗通知を送信できませんでした。", notificationError);
+    }
+    throw error;
+  }
+
+  try {
+    GmailApp.sendEmail(EMAIL_PRIMARY, "【家計簿】月次転記が完了",
+      ["対象月: " + result.targetMonth,
+        "月次入力: " + result.monthlyInputRows + "行追加",
+        "月次実績: " + result.monthlyActualRows + "行追加"].join("\n"));
+  } catch (error) {
+    throw new Error(monthKey + " の月次転記は完了しましたが、結果メールを送信できませんでした。 " + error.message);
+  }
+  return result;
+}
+
+function transferMonthlyActuals_(spreadsheet, timezone, monthKey) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
