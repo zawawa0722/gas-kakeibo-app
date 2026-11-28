@@ -8,7 +8,14 @@ function doGet() {
 function getMobileDashboardMonth(month) {
   validateMobileDashboardRequest_(month);
 
-  const spreadsheet = getSpreadsheet();
+  return readMobileDashboardMonth_(getSpreadsheet(), month);
+}
+
+function readMobileDashboardMonth_(spreadsheet, month, sources = new Map()) {
+  const source = (name, lastRow) => {
+    if (!sources.has(name)) sources.set(name, readMigrationSource_(spreadsheet, name, lastRow, timezone));
+    return sources.get(name);
+  };
   const timezone = spreadsheet.getSpreadsheetTimeZone();
   const currentYear = Utilities.formatDate(new Date(), timezone, "yyyy");
   const rows = [];
@@ -22,11 +29,11 @@ function getMobileDashboardMonth(month) {
 
   if (month.startsWith(currentYear + "-")) {
     // 帳簿管理の収入総額・支出総額は8〜9行目にある。
-    const ledger = readMigrationSource_(spreadsheet, SHEET_THOUBOKANRI, 9, timezone);
+    const ledger = source(SHEET_THOUBOKANRI, 9);
     if (!ledger.months.has(month)) return { rows, available: false };
-    const income = readMigrationSource_(spreadsheet, SHEET_SYUNYUKANRI, 10, timezone);
-    const expense = readMigrationSource_(spreadsheet, SHEET_SISYUTUKANRI, 28, timezone);
-    const online = readMigrationSource_(spreadsheet, SHEET_ONLINE, 9, timezone);
+    const income = source(SHEET_SYUNYUKANRI, 10);
+    const expense = source(SHEET_SISYUTUKANRI, 28);
+    const online = source(SHEET_ONLINE, 9);
     for (const label of income.labels.filter(label => label !== "収入総額")) {
       addRow("収入", label, "", income.amount(label, month));
     }
@@ -46,8 +53,9 @@ function getMobileDashboardMonth(month) {
   }
 
   const archive = spreadsheet.getSheetByName("月次実績");
-  if (!archive) throw new Error("月次実績シートが見つかりません。");
-  const [headers, ...actuals] = archive.getDataRange().getValues();
+  if (!archive || archive.getLastRow() === 0) return { rows, available: false };
+  if (!sources.has("月次実績")) sources.set("月次実績", archive.getDataRange().getValues());
+  const [headers, ...actuals] = sources.get("月次実績");
   if (!["対象月", "区分", "カテゴリ", "内訳", "金額"].every((label, index) => headers[index] === label)) {
     throw new Error("月次実績シートの見出しを確認してください。");
   }
@@ -93,4 +101,130 @@ function getMobileDashboardTransactions(month) {
   }
   transactions.sort((a, b) => b.day - a.day || b.time - a.time);
   return transactions.map(({ time, ...transaction }) => transaction);
+}
+
+function getMobileDashboardOverview(month) {
+  validateMobileDashboardRequest_(month);
+  const spreadsheet = getSpreadsheet();
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
+  const today = Utilities.formatDate(new Date(), timezone, "yyyy-MM-dd");
+  const currentMonth = today.slice(0, 7);
+  const sources = new Map();
+  const data = readMobileDashboardMonth_(spreadsheet, month, sources);
+  const previousMonth = shiftMobileMonth_(month, -1);
+  const actuals = Array.from({ length: 6 }, (_, index) => {
+    const key = shiftMobileMonth_(month, index - 5);
+    try {
+      const result = key === month ? data : readMobileDashboardMonth_(spreadsheet, key, sources);
+      return {
+        month: key,
+        balance: key <= currentMonth && result.available
+          ? result.rows.reduce((total, row) => total + row.amount, 0) : null,
+        partial: key === currentMonth
+      };
+    } catch (error) {
+      console.error(error);
+      return { month: key, balance: null, partial: false };
+    }
+  });
+
+  let previousRows = null;
+  let budget = null;
+  let installments = null;
+  const errors = {};
+  try {
+    if (month < currentMonth && actuals[4].balance !== null) {
+      previousRows = readMobileDashboardMonth_(spreadsheet, previousMonth, sources).rows;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+  try {
+    if (data.available) budget = readMobileBudget_(spreadsheet, month, data.rows, timezone);
+  } catch (error) {
+    console.error(error);
+    errors.budget = "変動費予算の設定を確認してください。";
+  }
+  try {
+    installments = readMobileInstallments_(spreadsheet, today, timezone);
+  } catch (error) {
+    console.error(error);
+    errors.installments = "分割払い管理シートを確認してください。";
+  }
+  return { ...data, actuals, previousRows, budget, installments, errors };
+}
+
+function shiftMobileMonth_(key, offset) {
+  const [year, month] = key.split("-").map(Number);
+  const index = year * 12 + month - 1 + offset;
+  return String(Math.floor(index / 12)).padStart(4, "0") + "-" +
+    String(index % 12 + 1).padStart(2, "0");
+}
+
+function readMobileBudget_(spreadsheet, month, rows, timezone) {
+  const plan = spreadsheet.getSheetByName("変動費予算");
+  let plannedIncome = null;
+  if (plan && plan.getLastRow() > 0) {
+    const [headers, ...entries] = plan.getRange(1, 1, plan.getLastRow(), 2).getValues();
+    if (headers[0] !== "対象月" || headers[1] !== "手取り収入見込み") {
+      throw new Error("変動費予算シートの見出しを確認してください。");
+    }
+    for (const [date, amount] of entries) {
+      if (normalizeMonthKey_(date, timezone, true) !== month || amount === "") continue;
+      if (!Number.isFinite(amount) || amount < 0 || plannedIncome !== null) {
+        throw new Error("手取り収入見込みの金額または年月の重複を確認してください。");
+      }
+      plannedIncome = amount;
+    }
+  }
+  const sum = entries => entries.reduce((total, row) => total + row.amount, 0);
+  const income = plannedIncome ?? sum(rows.filter(row => row.kind === "収入"));
+  if (plannedIncome === null && income <= 0) return null;
+
+  const fixedCategories = new Set(["家賃", "通信費", "分割費", "ローン"]);
+  const expenses = rows.filter(row => row.kind === "支出");
+  const fixed = -sum(expenses.filter(row => fixedCategories.has(row.category)));
+  const used = -sum(expenses.filter(row => !fixedCategories.has(row.category)));
+  return { limit: income - fixed, used, planned: plannedIncome !== null };
+}
+
+function readMobileInstallments_(spreadsheet, today, timezone) {
+  const sheet = spreadsheet.getSheetByName("分割払い管理");
+  if (!sheet) return null;
+  const [headers, ...entries] = sheet.getDataRange().getValues();
+  const columns = [
+    ["商品名"], ["支払総額", "支払い総額"], ["分割回数"], ["初回引落日", "初回引き落とし日", "初回支払日"]
+  ].map(aliases => headers.findIndex(value => aliases.includes(String(value).trim())));
+  if (columns.includes(-1)) throw new Error("分割払い管理の見出しを確認してください。");
+
+  const currentMonth = today.slice(0, 7);
+  const nextMonth = shiftMobileMonth_(currentMonth, 1);
+  const daysInCurrentMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).getUTCDate();
+  const items = [];
+  for (const row of entries) {
+    const [name, total, count, firstDate] = columns.map(index => row[index]);
+    if ([name, total, count, firstDate].every(value => value === "")) continue;
+    if (!name || !Number.isInteger(total) || total < 0 || !Number.isInteger(count) || count < 1 ||
+        !(firstDate instanceof Date) || !Number.isFinite(firstDate.getTime())) {
+      throw new Error("分割払い管理の入力内容を確認してください。");
+    }
+    const firstDateKey = Utilities.formatDate(firstDate, timezone, "yyyy-MM-dd");
+    const firstMonth = firstDateKey.slice(0, 7);
+    const offset = key => (Number(key.slice(0, 4)) - Number(firstMonth.slice(0, 4))) * 12 +
+      Number(key.slice(5, 7)) - Number(firstMonth.slice(5, 7));
+    const dueDay = Math.min(Number(firstDateKey.slice(8, 10)), daysInCurrentMonth);
+    const paid = Math.max(0, Math.min(count, offset(currentMonth) + (Number(today.slice(8, 10)) >= dueDay ? 1 : 0)));
+    if (paid === count) continue;
+    const regular = Math.floor(total / count);
+    const nextIndex = offset(nextMonth);
+    const next = nextIndex < 0 || nextIndex >= count ? 0 :
+      nextIndex === count - 1 ? total - regular * (count - 1) : regular;
+    items.push({ name: String(name), next, remaining: total - regular * paid });
+  }
+  return {
+    nextMonth,
+    next: items.reduce((sum, item) => sum + item.next, 0),
+    remaining: items.reduce((sum, item) => sum + item.remaining, 0),
+    items
+  };
 }
