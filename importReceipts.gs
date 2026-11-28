@@ -80,7 +80,7 @@ function receiptRowsById_(sheet, id, width) {
     .map(cell => sheet.getRange(cell.getRow(), 1, 1, width).getValues()[0]);
 }
 
-function importReceiptFile_(context, file) {
+function importReceiptFile_(context, file, reportStage = () => {}) {
   const id = file.getId();
   const saved = receiptRowsById_(context.receipts, id, RECEIPT_HEADERS.length);
   const items = receiptRowsById_(context.items, id, RECEIPT_ITEM_HEADERS.length);
@@ -93,8 +93,10 @@ function importReceiptFile_(context, file) {
     return { store: saved[0][2], total: saved[0][5], itemCount: items.length, alreadyRegistered: true };
   }
 
+  reportStage(2);
   const receipt = readReceiptImage_(file, context.model);
   const { header, details } = buildReceiptRows_(receipt, file, context.timezone);
+  reportStage(3);
   if (items.length) {
     if (JSON.stringify(items) !== JSON.stringify(details)) {
       throw new Error("前回の処理で保存した商品明細と今回の読取結果が異なります。");
@@ -165,7 +167,9 @@ function readReceiptImage_(file, model) {
           "判別できるブランドや容量は残し、確認できないブランドや品種は補わない。特定できなければnameはnull。",
           "categoryは商品ごとに必ず1つ選ぶ。候補は " + RECEIPT_PRODUCT_CATEGORIES.join("、") + "。不明ならその他、値引き行なら値引き。",
           "会員番号、シリアル番号、住所、電話番号、広告は抽出しない。",
-          "合計や明細を推測で補完しない。明細の欠落、外貨、判読不能、混在する税込・税抜など検算ができない場合は readable=false。"
+          "8%と10%の税率、軽減税率の印、内税の内訳は、税込・税抜の混在を意味しない。商品・値引きの印字金額に税が含まれているかを個別に確認する。",
+          "税込・税抜が実際に混在するときは、明細合計に別途加算される外税額だけを追加税額（additionalTax）に入れる。内税額は含めない。印字で確認できなければnull。税抜小計（subtotal）はレシート全体の税抜小計が印字されている場合だけ返す。",
+          "合計や明細を推測で補完しない。明細の欠落、外貨、判読不能など検算に必要な事項を確認できない場合は readable=false。"
         ].join("\n") },
         { type: "input_image", detail: "high",
           image_url: "data:" + mime + ";base64," + Utilities.base64Encode(image.getBytes()) }
@@ -194,7 +198,7 @@ function receiptResponseSchema_() {
   const number = { type: ["number", "null"] };
   return object({
     readable: { type: "boolean" }, store: str, date: str, time: str, subtotal: yen, tax: yen,
-    total: yen, payment: str, items: { type: "array", items: object({
+    additionalTax: yen, total: yen, payment: str, items: { type: "array", items: object({
       type: { type: "string", enum: ["商品", "値引き"] },
       raw: str, name: str, quantity: number, amount: yen,
       basis: { type: ["string", "null"], enum: ["税込", "税抜", null] },
@@ -241,18 +245,25 @@ function buildReceiptRows_(receipt, file, timezone) {
       (subtotal !== null && (!Number.isSafeInteger(subtotal) || subtotal < 0))) {
     throw new Error("税抜小計または消費税を確認できません。");
   }
+  let basis = "";
   if (knownBases.size > 1) {
-    throw new Error("税込・税抜の明細が混在しているため検算できません。");
+    const additionalTax = receipt.additionalTax;
+    if (!Number.isSafeInteger(additionalTax) || additionalTax < 0 ||
+        (tax !== null && additionalTax > tax) || sum + additionalTax !== receipt.total ||
+        (subtotal !== null && tax !== null && subtotal + tax !== receipt.total)) {
+      throw new Error("税込・税抜の明細と、別途加算される消費税を支払合計と照合できません。");
+    }
+  } else {
+    const matchingBases = [];
+    if (!knownBases.has("税抜") && sum === receipt.total) matchingBases.push("税込");
+    if (!knownBases.has("税込") && tax !== null && sum + tax === receipt.total &&
+        (subtotal === null || subtotal === sum)) matchingBases.push("税抜");
+    if (matchingBases.length === 0) {
+      throw new Error("商品・値引きの合計が支払合計と一致しません。レシートの明細と合計が写っているか確認してください。");
+    }
+    basis = matchingBases.length === 1 ? matchingBases[0] : "";
+    for (const row of details) row[7] = basis;
   }
-  const matchingBases = [];
-  if (!knownBases.has("税抜") && sum === receipt.total) matchingBases.push("税込");
-  if (!knownBases.has("税込") && tax !== null && sum + tax === receipt.total &&
-      (subtotal === null || subtotal === sum)) matchingBases.push("税抜");
-  if (matchingBases.length === 0) {
-    throw new Error("商品・値引きの合計が支払合計と一致しません。レシートの明細と合計が写っているか確認してください。");
-  }
-  const basis = matchingBases.length === 1 ? matchingBases[0] : "";
-  for (const row of details) row[7] = basis;
   const header = [id, date, receipt.store,
     receipt.subtotal ?? (basis === "税抜" ? sum : ""), tax ?? "", receipt.total,
     receipt.payment ?? "", file.getUrl(), "読取済み", "未照合", ""];

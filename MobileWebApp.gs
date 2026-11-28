@@ -234,8 +234,9 @@ function readMobileInstallments_(spreadsheet, month, timezone) {
 }
 
 // 同一JPEGの再送は既存ファイルを使い、登録済みならAPIを呼ばない。
-function registerMobileReceipt(jpeg) {
+function registerMobileReceipt(jpeg, requestId) {
   requireMobileOwner_();
+  const progressKey = mobileReceiptProgressKey_(requestId);
   const maxBytes = 4 * 1024 * 1024;
   if (typeof jpeg !== "string" || jpeg.length > Math.ceil(maxBytes / 3) * 4 ||
       !/^[A-Za-z0-9+/]+={0,2}$/.test(jpeg)) {
@@ -265,7 +266,14 @@ function registerMobileReceipt(jpeg) {
     const pending = context.inbox.getFilesByName(name);
     const file = pending.hasNext() ? pending.next() :
       context.inbox.createFile(Utilities.newBlob(bytes, "image/jpeg", name));
-    return importReceiptFile_(context, file);
+    const reportStage = stage => {
+      try {
+        CacheService.getUserCache().put(progressKey, String(stage), 600);
+      } catch (error) {
+        console.warn("レシート登録の進捗を更新できませんでした。");
+      }
+    };
+    return importReceiptFile_(context, file, reportStage);
   } finally {
     lock.releaseLock();
   }
@@ -287,4 +295,16 @@ function getMobileReceiptHistory() {
       store: String(row[2]),
       total: row[5]
     }));
+}
+
+function mobileReceiptProgressKey_(requestId) {
+  if (typeof requestId !== "string" || !/^[0-9a-f-]{36}$/.test(requestId)) {
+    throw new Error("レシート登録の識別子が無効です。");
+  }
+  return "mobile-receipt-progress:" + requestId;
+}
+
+function getMobileReceiptProgress(requestId) {
+  requireMobileOwner_();
+  return Number(CacheService.getUserCache().get(mobileReceiptProgressKey_(requestId))) || 1;
 }

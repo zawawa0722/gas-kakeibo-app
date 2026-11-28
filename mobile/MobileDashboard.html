@@ -197,7 +197,7 @@
     <img class="receipt-preview" id="receipt-preview" alt="選んだレシート" hidden>
     <p class="caption">画像をOpenAIに送信し、読み取った内容を家計簿に保存します。</p>
     <button class="receipt-submit" id="receipt-submit" type="submit" disabled>読み取って登録</button>
-    <progress id="receipt-progress" aria-label="レシート登録の進捗" hidden></progress>
+    <progress id="receipt-progress" max="100" value="0" aria-label="レシート登録の進捗" hidden></progress>
     <p id="receipt-elapsed" class="caption" hidden></p>
     <p id="receipt-status" role="status"></p>
   </form>
@@ -550,6 +550,7 @@
     clearReceiptPreview();
     receiptInput.value = '';
     receiptSubmit.disabled = true;
+    receiptProgress.hidden = true;
   });
   receiptInput.addEventListener('change', () => {
     clearReceiptPreview();
@@ -557,6 +558,7 @@
     receiptSubmit.disabled = !live || !file;
     if (!file) return;
     receiptStatus.textContent = '';
+    receiptProgress.hidden = true;
     receiptPreviewUrl = URL.createObjectURL(file);
     receiptPreview.src = receiptPreviewUrl;
     receiptPreview.hidden = false;
@@ -595,22 +597,54 @@
     };
     updateElapsed();
     const timer = setInterval(updateElapsed, 1000);
-    receiptStatus.textContent = '画像を準備中…';
+    const stages = [
+      [0, '画像を準備中…'], [25, '画像を送信中…'],
+      [50, 'レシートを読み取り・検算中…'], [75, 'スプレッドシートに保存中…'],
+      [100, '登録完了']
+    ];
+    let stage = -1;
+    let pollTimer;
+    let finished = false;
+    const showStage = next => {
+      if (next <= stage || !stages[next]) return;
+      stage = next;
+      const [percent, label] = stages[stage];
+      receiptProgress.value = percent;
+      receiptStatus.textContent = percent + '% · ' + label;
+    };
+    showStage(0);
     try {
       const jpeg = await receiptJpeg(receiptPreviewUrl);
-      receiptStatus.textContent = '読み取り・登録中…';
+      const progressId = crypto.randomUUID();
+      showStage(1);
+      const poll = () => {
+        if (finished) return;
+        const schedule = () => {
+          if (!finished) pollTimer = setTimeout(poll, 2000);
+        };
+        google.script.run.withSuccessHandler(next => {
+          if (!finished) showStage(next);
+          schedule();
+        }).withFailureHandler(schedule).getMobileReceiptProgress(progressId);
+      };
+      pollTimer = setTimeout(poll, 1000);
       const result = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).registerMobileReceipt(jpeg);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
+          .registerMobileReceipt(jpeg, progressId);
       });
-      receiptStatus.textContent = (result.alreadyRegistered ? '登録済みです。' : '登録しました。') +
+      showStage(4);
+      receiptStatus.textContent = (result.alreadyRegistered ? '100% · 登録済みです。' : '100% · 登録しました。') +
         ' ' + result.store + ' ' + formatYen(result.total);
       receiptInput.value = '';
       clearReceiptPreview();
     } catch (error) {
       receiptStatus.textContent = error?.message || 'レシートを登録できませんでした。';
     } finally {
+      finished = true;
+      clearTimeout(pollTimer);
       clearInterval(timer);
-      receiptProgress.hidden = receiptElapsed.hidden = true;
+      receiptProgress.hidden = stage !== 4;
+      receiptElapsed.hidden = stage !== 4;
       receiptBusy = false;
       receiptInput.disabled = byId('receipt-close').disabled = false;
       receiptSubmit.disabled = !receiptInput.files.length;
