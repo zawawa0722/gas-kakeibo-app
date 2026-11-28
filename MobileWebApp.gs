@@ -116,8 +116,7 @@ function getMobileDashboardOverview(month) {
   validateMobileDashboardRequest_(month);
   const spreadsheet = getSpreadsheet();
   const timezone = spreadsheet.getSpreadsheetTimeZone();
-  const today = Utilities.formatDate(new Date(), timezone, "yyyy-MM-dd");
-  const currentMonth = today.slice(0, 7);
+  const currentMonth = Utilities.formatDate(new Date(), timezone, "yyyy-MM");
   const sources = new Map();
   const data = readMobileDashboardMonth_(spreadsheet, month, sources);
   const previousMonth = shiftMobileMonth_(month, -1);
@@ -155,7 +154,7 @@ function getMobileDashboardOverview(month) {
     errors.budget = "変動費予算の設定を確認してください。";
   }
   try {
-    installments = readMobileInstallments_(spreadsheet, today, timezone);
+    installments = readMobileInstallments_(spreadsheet, month, timezone);
   } catch (error) {
     console.error(error);
     errors.installments = "分割払い管理シートを確認してください。";
@@ -200,7 +199,7 @@ function readMobileBudget_(spreadsheet, month, rows, timezone) {
   return { limit: income - fixed, used, planned: plannedIncome !== null };
 }
 
-function readMobileInstallments_(spreadsheet, today, timezone) {
+function readMobileInstallments_(spreadsheet, month, timezone) {
   const sheet = spreadsheet.getSheetByName("分割払い管理");
   if (!sheet) return null;
   const [headers, ...entries] = sheet.getDataRange().getValues();
@@ -209,9 +208,8 @@ function readMobileInstallments_(spreadsheet, today, timezone) {
   ].map(aliases => headers.findIndex(value => aliases.includes(String(value).trim())));
   if (columns.includes(-1)) throw new Error("分割払い管理の見出しを確認してください。");
 
-  const currentMonth = today.slice(0, 7);
-  const nextMonth = shiftMobileMonth_(currentMonth, 1);
-  const daysInCurrentMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).getUTCDate();
+  const monthIndex = key => Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7));
+  const selected = monthIndex(month);
   const items = [];
   for (const row of entries) {
     const [name, total, count, firstDate] = columns.map(index => row[index]);
@@ -220,22 +218,16 @@ function readMobileInstallments_(spreadsheet, today, timezone) {
         !(firstDate instanceof Date) || !Number.isFinite(firstDate.getTime())) {
       throw new Error("分割払い管理の入力内容を確認してください。");
     }
-    const firstDateKey = Utilities.formatDate(firstDate, timezone, "yyyy-MM-dd");
-    const firstMonth = firstDateKey.slice(0, 7);
-    const offset = key => (Number(key.slice(0, 4)) - Number(firstMonth.slice(0, 4))) * 12 +
-      Number(key.slice(5, 7)) - Number(firstMonth.slice(5, 7));
-    const dueDay = Math.min(Number(firstDateKey.slice(8, 10)), daysInCurrentMonth);
-    const paid = Math.max(0, Math.min(count, offset(currentMonth) + (Number(today.slice(8, 10)) >= dueDay ? 1 : 0)));
-    if (paid === count) continue;
+    const firstMonth = Utilities.formatDate(firstDate, timezone, "yyyy-MM");
+    const index = selected - monthIndex(firstMonth);
+    if (index < 0 || index >= count) continue;
     const regular = Math.floor(total / count);
-    const nextIndex = offset(nextMonth);
-    const next = nextIndex < 0 || nextIndex >= count ? 0 :
-      nextIndex === count - 1 ? total - regular * (count - 1) : regular;
-    items.push({ name: String(name), next, remaining: total - regular * paid });
+    const payment = index === count - 1 ? total - regular * index : regular;
+    items.push({ name: String(name), payment, remaining: total - regular * index - payment });
   }
   return {
-    nextMonth,
-    next: items.reduce((sum, item) => sum + item.next, 0),
+    month,
+    payment: items.reduce((sum, item) => sum + item.payment, 0),
     remaining: items.reduce((sum, item) => sum + item.remaining, 0),
     items
   };
@@ -277,4 +269,22 @@ function registerMobileReceipt(jpeg) {
   } finally {
     lock.releaseLock();
   }
+}
+
+
+function getMobileReceiptHistory() {
+  requireMobileOwner_();
+  const spreadsheet = getSpreadsheet();
+  const sheet = requireReceiptSheet_(spreadsheet, "レシート", RECEIPT_HEADERS);
+  const count = sheet.getLastRow() - 1;
+  if (count < 1) return [];
+
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
+  return sheet.getRange(2, 1, count, RECEIPT_HEADERS.length).getValues().reverse()
+    .filter(row => row[0] && row[8] === "読取済み")
+    .map(row => ({
+      date: row[1] instanceof Date ? Utilities.formatDate(row[1], timezone, "yyyy/MM/dd") : String(row[1]),
+      store: String(row[2]),
+      total: row[5]
+    }));
 }

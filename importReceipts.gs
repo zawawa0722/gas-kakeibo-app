@@ -1,5 +1,9 @@
 // フォルダIDはスクリプト プロパティに設定する。
 const MOBILE_RECEIPT_PREFIX = "mobile-receipt-";
+const RECEIPT_PRODUCT_CATEGORIES = [
+  "食品", "飲料", "酒類", "日用品", "医薬品・衛生用品", "化粧品・美容",
+  "衣類", "家電・雑貨", "外食", "サービス", "値引き", "その他"
+];
 const RECEIPT_HEADERS = [
   "レシートID", "購入日時", "店舗名", "税抜小計", "消費税", "支払合計",
   "支払方法", "元画像", "読取状態", "照合状態", "明細ID"
@@ -157,6 +161,9 @@ function readReceiptImage_(file, model) {
           "商品・値引きに実際に印字された行金額を返す。単価と数量が併記されている場合は行合計を使う。",
           "税込・税抜が行ごとに印字されない場合は、レシート全体に適用される表記から判断し、不明ならnull。内税額を支払合計に再加算しない。税率は0.08または0.10などの小数。税はレシート全体の税額のみ。",
           "数量の印字がなければnull。支払合計は預り金やポイント残高を除いた会計合計。",
+          "rawにはレシートの表記をそのまま入れる。nameには略称、半角カナ、商品コードを整理した、読みやすい日本語の商品名を入れる。例：ｷﾞｭｳﾆｭｳ1L → 牛乳 1L、ﾀﾏｺﾞ10ｺ → 卵 10個。",
+          "判別できるブランドや容量は残し、確認できないブランドや品種は補わない。特定できなければnameはnull。",
+          "categoryは商品ごとに必ず1つ選ぶ。候補は " + RECEIPT_PRODUCT_CATEGORIES.join("、") + "。不明ならその他、値引き行なら値引き。",
           "会員番号、シリアル番号、住所、電話番号、広告は抽出しない。",
           "合計や明細を推測で補完しない。明細の欠落、外貨、判読不能、混在する税込・税抜など検算ができない場合は readable=false。"
         ].join("\n") },
@@ -191,7 +198,7 @@ function receiptResponseSchema_() {
       type: { type: "string", enum: ["商品", "値引き"] },
       raw: str, name: str, quantity: number, amount: yen,
       basis: { type: ["string", "null"], enum: ["税込", "税抜", null] },
-      rate: number, category: str
+      rate: number, category: { type: "string", enum: RECEIPT_PRODUCT_CATEGORIES }
     }) }
   });
 }
@@ -222,8 +229,11 @@ function buildReceiptRows_(receipt, file, timezone) {
     const amount = item.type === "値引き" ? -Math.abs(item.amount) : item.amount;
     if (item.basis !== null) knownBases.add(item.basis);
     sum += amount;
-    return [id, index + 1, item.type, item.raw, item.name || item.raw, item.quantity ?? "",
-      amount, item.basis ?? "", item.rate ?? "", item.category ?? ""];
+    const name = (item.name?.trim() || item.raw).normalize("NFKC").replace(/\s+/g, " ").trim();
+    const category = item.type === "値引き" ? "値引き" :
+      RECEIPT_PRODUCT_CATEGORIES.includes(item.category) && item.category !== "値引き" ? item.category : "その他";
+    return [id, index + 1, item.type, item.raw, name, item.quantity ?? "",
+      amount, item.basis ?? "", item.rate ?? "", category];
   });
   const tax = receipt.tax;
   const subtotal = receipt.subtotal;

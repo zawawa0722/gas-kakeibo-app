@@ -121,6 +121,7 @@
   .receipt-preview[hidden] { display: none; }
   .receipt-submit { width: 100%; min-height: 48px; border-radius: 10px; background: var(--teal); color: white; font-weight: 700; }
   .receipt-submit:disabled { background: var(--line); color: var(--ink); }
+  #receipt-progress { width: 100%; accent-color: var(--teal); }
   #receipt-status { overflow-wrap: anywhere; }
   #receipt-status:empty { display: none; }
   .empty { padding: 10px; color: #526071; }
@@ -177,7 +178,7 @@
   <nav aria-label="メインメニュー">
     <button type="button" id="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8M6 10v11h5v-6h3v6h4V10"/></svg>ホーム</button>
     <button type="button" id="receipt-open"><span class="camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h5l2-3h4l2 3h5v13H3z"/><circle cx="12" cy="13" r="4"/></svg></span>レシート登録</button>
-    <button type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 3"/></svg>登録履歴</button>
+    <button type="button" id="receipt-history"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 3"/></svg>登録履歴</button>
   </nav>
 </div>
 <dialog id="detail" aria-labelledby="dialog-title">
@@ -196,6 +197,8 @@
     <img class="receipt-preview" id="receipt-preview" alt="選んだレシート" hidden>
     <p class="caption">画像をOpenAIに送信し、読み取った内容を家計簿に保存します。</p>
     <button class="receipt-submit" id="receipt-submit" type="submit" disabled>読み取って登録</button>
+    <progress id="receipt-progress" aria-label="レシート登録の進捗" hidden></progress>
+    <p id="receipt-elapsed" class="caption" hidden></p>
     <p id="receipt-status" role="status"></p>
   </form>
   <form method="dialog" class="dialog-actions"><button id="receipt-close" class="link dialog-close">閉じる</button></form>
@@ -399,22 +402,22 @@
       content.append(element('p', 'empty', '支払い予定はありません。'));
       return;
     }
-    const nextLabel = monthNumber(monthIndex(plan.nextMonth)) + '月の支払い予定';
-    content.append(installmentAmounts(nextLabel, plan.next, plan.remaining));
+    const monthLabel = monthNumber(monthIndex(plan.month)) + '月の支払額';
+    content.append(installmentAmounts(monthLabel, plan.payment, plan.remaining));
     button.onclick = () => {
       const list = element('div', 'installment-list', '');
       for (const item of plan.items) {
         const entry = element('article', 'installment-entry', '');
-        entry.append(element('h3', '', item.name), installmentAmounts(nextLabel, item.next, item.remaining));
+        entry.append(element('h3', '', item.name), installmentAmounts(monthLabel, item.payment, item.remaining));
         list.append(entry);
       }
       openDialog('分割払いの支払い予定', list);
     };
   }
 
-  function installmentAmounts(nextLabel, next, remaining) {
+  function installmentAmounts(monthLabel, payment, remaining) {
     const totals = element('div', 'installment-totals', '');
-    for (const [label, amount] of [[nextLabel, next], ['未払い総額（予定）', remaining]]) {
+    for (const [label, amount] of [[monthLabel, payment], ['月末の未払い総額（予定）', remaining]]) {
       const column = element('div', 'caption', label);
       column.append(element('strong', '', formatYen(amount)));
       totals.append(column);
@@ -491,8 +494,8 @@
       available: month === demoMonth, previousRows: null, actuals, errors: {},
       budget: month === demoMonth ? { limit: 157000, used: 74600, planned: true } : null,
       installments: {
-        nextMonth: monthKey(demoMonth + 1), next: 14630, remaining: 87780,
-        items: [{ name: '家電', next: 14630, remaining: 87780 }]
+        month: monthKey(month), payment: 14630, remaining: 87780,
+        items: [{ name: '家電', payment: 14630, remaining: 87780 }]
       }
     };
   }
@@ -526,6 +529,8 @@
   const receiptSubmit = byId('receipt-submit');
   const receiptStatus = byId('receipt-status');
   const receiptPreview = byId('receipt-preview');
+  const receiptProgress = byId('receipt-progress');
+  const receiptElapsed = byId('receipt-elapsed');
 
   function clearReceiptPreview() {
     if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
@@ -583,9 +588,17 @@
     if (!live || receiptBusy || !receiptPreviewUrl) return;
     receiptBusy = true;
     receiptInput.disabled = receiptSubmit.disabled = byId('receipt-close').disabled = true;
-    receiptStatus.textContent = '読み取り・登録中…';
+    receiptProgress.hidden = receiptElapsed.hidden = false;
+    const started = performance.now();
+    const updateElapsed = () => {
+      receiptElapsed.textContent = '経過 ' + Math.floor((performance.now() - started) / 1000) + '秒';
+    };
+    updateElapsed();
+    const timer = setInterval(updateElapsed, 1000);
+    receiptStatus.textContent = '画像を準備中…';
     try {
       const jpeg = await receiptJpeg(receiptPreviewUrl);
+      receiptStatus.textContent = '読み取り・登録中…';
       const result = await new Promise((resolve, reject) => {
         google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).registerMobileReceipt(jpeg);
       });
@@ -596,9 +609,44 @@
     } catch (error) {
       receiptStatus.textContent = error?.message || 'レシートを登録できませんでした。';
     } finally {
+      clearInterval(timer);
+      receiptProgress.hidden = receiptElapsed.hidden = true;
       receiptBusy = false;
       receiptInput.disabled = byId('receipt-close').disabled = false;
       receiptSubmit.disabled = !receiptInput.files.length;
+    }
+  });
+
+  byId('receipt-history').addEventListener('click', async () => {
+    const content = element('div', '', '');
+    const status = element('p', 'empty', '登録履歴を読み込み中…');
+    status.setAttribute('role', 'status');
+    content.append(status);
+    openDialog('レシート登録履歴', content);
+    if (!live) {
+      status.textContent = '登録履歴はGASのウェブアプリで確認できます。';
+      return;
+    }
+    try {
+      const receipts = await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getMobileReceiptHistory();
+      });
+      if (!receipts.length) {
+        status.textContent = '登録済みのレシートはありません。';
+        return;
+      }
+      const list = element('ul', 'figures', '');
+      for (const receipt of receipts) {
+        const item = element('li', '', '');
+        const description = element('span', '', '');
+        description.append(element('small', 'caption', receipt.date), document.createElement('br'),
+          element('b', '', receipt.store));
+        item.append(description, element('strong', '', formatYen(receipt.total)));
+        list.append(item);
+      }
+      content.replaceChildren(list);
+    } catch (error) {
+      status.textContent = error?.message || '登録履歴を読み込めませんでした。';
     }
   });
 
