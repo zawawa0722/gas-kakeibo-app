@@ -74,8 +74,6 @@ function getFileId(isButtonPressed) {
   let targetDateget;
   let targetFileName;
   let targetFileYear;
-  let oneMonthAgo;
-  let TODAY = new Date();
 
   // ボタンが押された場合、G15とH15セルの日付をそのまま使用
   if (isButtonPressed) {
@@ -85,9 +83,7 @@ function getFileId(isButtonPressed) {
     targetFileName = `ワンバンク支出_${targetFileYear}.csv`;
   } else { 
     // ボタンが押されなかった場合、1ヶ月前の日付を使用
-    oneMonthAgo = new Date(TODAY);
-    oneMonthAgo.setMonth(TODAY.getMonth() - 1);
-    targetFileYear = Utilities.formatDate(oneMonthAgo, 'JST', 'yyyy');
+    targetFileYear = getPreviousMonth_(SPREADSHEET.getSpreadsheetTimeZone()).year;
     targetFileName = `ワンバンク支出_${targetFileYear}.csv`;
   }
 

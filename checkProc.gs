@@ -2,7 +2,6 @@ function extractTargetLine(fileId, imButtonPressed) {
   
   // 日付文字列の作成
   let targetDate;
-  let TODAY = new Date();
   let SPREADSHEET = getSpreadsheet();
   if (imButtonPressed) {
     // yearCell と monthCell の値を取得
@@ -12,9 +11,7 @@ function extractTargetLine(fileId, imButtonPressed) {
     targetDate = `${year}/${String(month).padStart(2, '0')}`;
   } else {
     // imButtonPressed が FALSE の場合、先月の日付文字列を作成
-    TODAY.setMonth(TODAY.getMonth() - 1); // 先月に設定
-    let year = TODAY.getFullYear();
-    let month = TODAY.getMonth() + 1; // 月は0始まりのため+1
+    const { year, month } = getPreviousMonth_(SPREADSHEET.getSpreadsheetTimeZone());
     targetDate = `${year}/${String(month).padStart(2, '0')}`;
   }
 
@@ -64,7 +61,6 @@ function parseCSVLine(line) {
 function checkSheetsDate(imButtonPressed) {
    // 結果を格納する配列
   let result = [];
-  let TODAY = new Date();
   // imButtonPressed に基づいてターゲット日付を作成
   let targetDate;
   let SPREADSHEET = getSpreadsheet();
@@ -76,8 +72,8 @@ function checkSheetsDate(imButtonPressed) {
     targetDate = `${year}/${month}`;
   } else {
     // 本日の先月の日付を計算して yyyy/MM 形式で取得
-    let lastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
-    targetDate = Utilities.formatDate(lastMonth, 'Asia/Tokyo', "yyyy/MM");
+    const { year, month } = getPreviousMonth_(SPREADSHEET.getSpreadsheetTimeZone());
+    targetDate = `${year}/${String(month).padStart(2, '0')}`;
   }
 
   // 対象シートをループ処理
@@ -110,10 +106,9 @@ function checkSheetsDate(imButtonPressed) {
 
 // CSVインポートの成否チェック
 function checkImportValue(basicCells) {
-  let TODAY = new Date();
   let SPREADSHEET = getSpreadsheet();
-  let getlastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
-  let targetyyyyMM = Utilities.formatDate(getlastMonth, Session.getScriptTimeZone(), "yyyy/MM");
+  const { year, month } = getPreviousMonth_(SPREADSHEET.getSpreadsheetTimeZone());
+  const targetyyyyMM = `${year}/${String(month).padStart(2, '0')}`;
 
   let checkFlag = false; // ① チェックフラグをfalseに初期化
 

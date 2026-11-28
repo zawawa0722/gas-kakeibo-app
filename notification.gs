@@ -149,7 +149,6 @@ function createMessage() {
   let incomeAndExpenditure
   let spending
   let feedBack
-  let TODAY = new Date();
 
   // 設定シート読み込み
   SHEET_SETTING_CONTENTS = loadSheetSetting(SPREADSHEET);
@@ -157,12 +156,11 @@ function createMessage() {
   const USER_B_NAME = SHEET_SETTING_CONTENTS.USER_B_NAME;
 
   // 先月のyyyy/MM表記を生成 (ゼロ埋め対応)
-  let lastMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
-  let lastMonthText = `${lastMonth.getFullYear()}/${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
-  let lastMonthTextNotZero = `${String(lastMonth.getMonth() + 1)}`
+  const { year, month } = getPreviousMonth_(SPREADSHEET.getSpreadsheetTimeZone());
+  const lastMonthText = `${year}/${String(month).padStart(2, "0")}`;
   let dateValues = tyoubosheet.getRange(tyoubodateRange).getValues()[0];
   let lastMonthIndex = dateValues.indexOf(lastMonthText);
-  let headComment = `以下が${lastMonthTextNotZero}月の結果です。\nお疲れ様でした!`;
+  let headComment = `以下が${month}月の結果です。\nお疲れ様でした!`;
 
   // 帳簿管理のA8~A12の項目を取得
   try {

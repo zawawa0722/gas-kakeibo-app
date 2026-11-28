@@ -4,10 +4,7 @@ function migrateMonthlyActuals() {
   try {
     const spreadsheet = getSpreadsheet();
     const timezone = spreadsheet.getSpreadsheetTimeZone();
-    const [currentYear, currentMonth] = Utilities.formatDate(new Date(), timezone, "yyyy-MM")
-      .split("-").map(Number);
-    const year = currentMonth === 1 ? currentYear - 1 : currentYear;
-    const month = currentMonth === 1 ? 12 : currentMonth - 1;
+    const { year, month } = getPreviousMonth_(timezone);
     monthKey = year + "-" + String(month).padStart(2, "0");
     result = transferMonthlyActuals_(spreadsheet, timezone, monthKey);
   } catch (error) {
