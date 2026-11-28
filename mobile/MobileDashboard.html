@@ -8,18 +8,18 @@
   :root {
     color-scheme: light;
     --ink: #102641;
-    --paper: #f1edfc;
-    --teal: #5135ad;
-    --budget: #00756e;
-    --line: #ded7ef;
-    --hero: linear-gradient(140deg, #7446bc, #39369e);
+    --paper: #f7efe4;
+    --teal: #765034;
+    --budget: #765034;
+    --line: #e6d8c8;
+    --hero: linear-gradient(140deg, #90613d, #67422f);
     --warning: #b63842;
     --nav-height: 68px;
     font: 16px/1.5 system-ui, "Hiragino Sans", "Yu Gothic", sans-serif;
   }
-  :root[data-theme="sage"] {
-    --paper: #e9f5ee; --teal: #246746; --budget: #246746; --line: #cfe4d8;
-    --hero: linear-gradient(140deg, #43835c, #226556);
+  :root[data-theme="emerald"] {
+    --paper: #e5f7ef; --teal: #00664e; --budget: #00664e; --line: #c8e7d9;
+    --hero: linear-gradient(140deg, #008060, #005d49);
   }
   :root[data-theme="ocean"] {
     --paper: #e6f8fa; --teal: #005e9d; --budget: #005e9d; --line: #cce7ed;
@@ -97,6 +97,12 @@
   dialog::backdrop { background: #10264180; }
   #dialog-content { margin: 12px 0; }
   .setting-row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+  .receipt-form { display: grid; gap: 12px; margin: 12px 0; }
+  .receipt-form input { max-width: 100%; font: inherit; color: inherit; }
+  .receipt-preview { width: 100%; max-height: 40dvh; object-fit: contain; border-radius: 8px; }
+  .receipt-submit { min-height: 44px; border-radius: 8px; background: var(--teal); color: white; font-weight: 700; }
+  .receipt-submit:disabled { background: var(--line); color: var(--ink); }
+  #receipt-status { overflow-wrap: anywhere; }
   .empty { padding: 10px; color: #526071; }
 </style>
 </head>
@@ -150,7 +156,7 @@
   </main>
   <nav aria-label="メインメニュー">
     <button type="button" id="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8M6 10v11h5v-6h3v6h4V10"/></svg>ホーム</button>
-    <button type="button" disabled><span class="camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h5l2-3h4l2 3h5v13H3z"/><circle cx="12" cy="13" r="4"/></svg></span>レシート登録</button>
+    <button type="button" id="receipt-open"><span class="camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h5l2-3h4l2 3h5v13H3z"/><circle cx="12" cy="13" r="4"/></svg></span>レシート登録</button>
     <button type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 3"/></svg>登録履歴</button>
   </nav>
 </div>
@@ -158,6 +164,18 @@
   <h2 id="dialog-title"></h2>
   <div id="dialog-content"></div>
   <form method="dialog"><button class="link">閉じる</button></form>
+</dialog>
+<dialog id="receipt-dialog" aria-labelledby="receipt-title">
+  <h2 id="receipt-title">レシート登録</h2>
+  <form id="receipt-form" class="receipt-form">
+    <label for="receipt-image">レシートを1枚撮影または選択</label>
+    <input id="receipt-image" type="file" accept="image/*" capture="environment">
+    <img class="receipt-preview" id="receipt-preview" alt="選んだレシート" hidden>
+    <p class="caption">画像をOpenAIに送信し、読み取った内容を家計簿に保存します。</p>
+    <button class="receipt-submit" id="receipt-submit" type="submit" disabled>読み取って登録</button>
+    <p id="receipt-status" role="status"></p>
+  </form>
+  <form method="dialog"><button id="receipt-close" class="link">閉じる</button></form>
 </dialog>
 <script>
   'use strict';
@@ -177,14 +195,15 @@
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date());
   const demoMonth = 2026 * 12 + 10;
   const currentMonth = live ? monthIndex(today.slice(0, 7)) : demoMonth;
-  const themes = { sage: 'やさしい緑', ocean: '沖縄の海', contrast: 'メリハリ' };
+  const themes = { emerald: 'エメラルドグリーン', ocean: 'オーシャンブルー', sand: 'サンドベージュ' };
   const preferenceKey = 'kakeibo-dashboard-theme';
   let selectedMonth = currentMonth;
   let requestId = 0;
-  let theme = 'contrast';
+  let theme = 'sand';
 
   try {
-    const saved = localStorage.getItem(preferenceKey);
+    const stored = localStorage.getItem(preferenceKey);
+    const saved = stored === 'sage' ? 'emerald' : stored === 'contrast' ? 'sand' : stored;
     if (Object.hasOwn(themes, saved)) theme = saved;
   } catch {
     // ブラウザーの保存領域が使えない場合は既定色で表示する。
@@ -457,6 +476,87 @@
       if (request === requestId) status.textContent = error?.message || '家計簿を読み込めませんでした。';
     }
   }
+
+  let receiptPreviewUrl;
+  let receiptBusy = false;
+  const receiptDialog = byId('receipt-dialog');
+  const receiptInput = byId('receipt-image');
+  const receiptSubmit = byId('receipt-submit');
+  const receiptStatus = byId('receipt-status');
+  const receiptPreview = byId('receipt-preview');
+
+  function clearReceiptPreview() {
+    if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    receiptPreviewUrl = undefined;
+    receiptPreview.hidden = true;
+    receiptPreview.removeAttribute('src');
+  }
+
+  byId('receipt-open').addEventListener('click', () => {
+    receiptStatus.textContent = live ? '' : '登録はGASのウェブアプリで利用できます。';
+    receiptDialog.showModal();
+  });
+  receiptDialog.addEventListener('cancel', event => {
+    if (receiptBusy) event.preventDefault();
+  });
+  receiptDialog.addEventListener('close', () => {
+    clearReceiptPreview();
+    receiptInput.value = '';
+    receiptSubmit.disabled = true;
+  });
+  receiptInput.addEventListener('change', () => {
+    clearReceiptPreview();
+    const file = receiptInput.files[0];
+    receiptSubmit.disabled = !live || !file;
+    if (!file) return;
+    receiptStatus.textContent = '';
+    receiptPreviewUrl = URL.createObjectURL(file);
+    receiptPreview.src = receiptPreviewUrl;
+    receiptPreview.hidden = false;
+  });
+
+  async function receiptJpeg(url) {
+    const image = new Image();
+    image.src = url;
+    try {
+      await image.decode();
+    } catch {
+      throw new Error('画像を開けませんでした。カメラで撮影するか、JPEGまたはPNGを選び直してください。');
+    }
+    const scale = Math.min(1, 2400 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d', { alpha: false });
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+  }
+
+  byId('receipt-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!live || receiptBusy || !receiptPreviewUrl) return;
+    receiptBusy = true;
+    receiptInput.disabled = receiptSubmit.disabled = byId('receipt-close').disabled = true;
+    receiptStatus.textContent = '読み取り・登録中…';
+    try {
+      const jpeg = await receiptJpeg(receiptPreviewUrl);
+      const result = await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).registerMobileReceipt(jpeg);
+      });
+      receiptStatus.textContent = (result.alreadyRegistered ? '登録済みです。' : '登録しました。') +
+        ' ' + result.store + ' ' + formatYen(result.total);
+      receiptInput.value = '';
+      clearReceiptPreview();
+    } catch (error) {
+      receiptStatus.textContent = error?.message || 'レシートを登録できませんでした。';
+    } finally {
+      receiptBusy = false;
+      receiptInput.disabled = byId('receipt-close').disabled = false;
+      receiptSubmit.disabled = !receiptInput.files.length;
+    }
+  });
 
   byId('previous').addEventListener('click', () => { selectedMonth -= 1; refresh(); });
   byId('next').addEventListener('click', () => { selectedMonth += 1; refresh(); });

@@ -70,11 +70,15 @@ function readMobileDashboardMonth_(spreadsheet, month, sources = new Map()) {
   return { rows, available };
 }
 
-function validateMobileDashboardRequest_(month) {
+function requireMobileOwner_() {
   const activeEmail = Session.getActiveUser().getEmail();
   if (!activeEmail || activeEmail !== Session.getEffectiveUser().getEmail()) {
     throw new Error("家計簿の所有者アカウントで開いてください。");
   }
+}
+
+function validateMobileDashboardRequest_(month) {
+  requireMobileOwner_();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("対象月が無効です。");
 }
 
@@ -230,4 +234,42 @@ function readMobileInstallments_(spreadsheet, today, timezone) {
     remaining: items.reduce((sum, item) => sum + item.remaining, 0),
     items
   };
+}
+
+// 同一JPEGの再送は既存ファイルを使い、登録済みならAPIを呼ばない。
+function registerMobileReceipt(jpeg) {
+  requireMobileOwner_();
+  const maxBytes = 4 * 1024 * 1024;
+  if (typeof jpeg !== "string" || jpeg.length > Math.ceil(maxBytes / 3) * 4 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(jpeg)) {
+    throw new Error("4MB以下のレシート画像を選んでください。");
+  }
+  const bytes = Utilities.base64Decode(jpeg);
+  if (bytes.length < 4 || bytes.length > maxBytes ||
+      (bytes[0] & 255) !== 255 || (bytes[1] & 255) !== 216 || (bytes[2] & 255) !== 255) {
+    throw new Error("レシート画像をJPEGに変換できませんでした。");
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) throw new Error("別のレシートを処理中です。少し待ってから再送してください。");
+  try {
+    const context = getReceiptImportContext_();
+    const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes);
+    const hash = digest.map(byte => (byte & 255).toString(16).padStart(2, "0")).join("");
+    const name = MOBILE_RECEIPT_PREFIX + hash + ".jpg";
+    const done = context.done.getFilesByName(name);
+    if (done.hasNext()) {
+      const saved = receiptRowsById_(context.receipts, done.next().getId(), RECEIPT_HEADERS.length);
+      if (saved.length !== 1 || saved[0][8] !== "読取済み") {
+        throw new Error("読取完了フォルダの画像と登録済みレシートを確認してください。");
+      }
+      return { store: saved[0][2], total: saved[0][5], alreadyRegistered: true };
+    }
+    const pending = context.inbox.getFilesByName(name);
+    const file = pending.hasNext() ? pending.next() :
+      context.inbox.createFile(Utilities.newBlob(bytes, "image/jpeg", name));
+    return importReceiptFile_(context, file);
+  } finally {
+    lock.releaseLock();
+  }
 }

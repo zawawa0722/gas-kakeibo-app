@@ -1,4 +1,5 @@
 // フォルダIDはスクリプト プロパティに設定する。
+const MOBILE_RECEIPT_PREFIX = "mobile-receipt-";
 const RECEIPT_HEADERS = [
   "レシートID", "購入日時", "店舗名", "税抜小計", "消費税", "支払合計",
   "支払方法", "元画像", "読取状態", "照合状態", "明細ID"
@@ -21,6 +22,7 @@ function importReceiptsFromDrive() {
     let failed = 0;
     while (files.hasNext() && attempted < 3 && Date.now() < deadline) {
       const file = files.next();
+      if (file.getName().startsWith(MOBILE_RECEIPT_PREFIX)) continue;
       const retryKey = "receipt-retry:" + file.getId();
       if (cache.get(retryKey)) continue;
       attempted++;
@@ -52,7 +54,7 @@ function getReceiptImportContext_() {
     receipts: requireReceiptSheet_(spreadsheet, "レシート", RECEIPT_HEADERS),
     items: requireReceiptSheet_(spreadsheet, "レシート商品明細", RECEIPT_ITEM_HEADERS),
     timezone: spreadsheet.getSpreadsheetTimeZone(),
-    model: properties.getProperty("RECEIPT_OPENAI_MODEL") || "gpt-4.1-mini"
+    model: properties.getProperty("RECEIPT_OPENAI_MODEL") || "gpt-6-luna"
   };
 }
 
@@ -84,7 +86,7 @@ function importReceiptFile_(context, file) {
       throw new Error("保存済みデータに不整合があります。");
     }
     file.moveTo(context.done);
-    return;
+    return { store: saved[0][2], total: saved[0][5], itemCount: items.length, alreadyRegistered: true };
   }
 
   const receipt = readReceiptImage_(file, context.model);
@@ -109,6 +111,7 @@ function importReceiptFile_(context, file) {
     throw new Error("レシートの保存を確認できません。");
   }
   file.moveTo(context.done);
+  return { store: header[2], total: header[5], itemCount: details.length, alreadyRegistered: false };
 }
 
 function appendReceiptRows_(sheet, rows, formatColumn, format) {
@@ -143,6 +146,7 @@ function readReceiptImage_(file, model) {
     muteHttpExceptions: true,
     payload: JSON.stringify({
       model,
+      ...(model === "gpt-6-luna" ? { reasoning: { effort: "none" } } : {}),
       store: false,
       max_output_tokens: 8000,
       input: [{ role: "user", content: [
@@ -164,6 +168,10 @@ function readReceiptImage_(file, model) {
   const status = response.getResponseCode();
   if (status < 200 || status >= 300) throw new Error("画像読取APIのHTTPステータス " + status);
   const body = JSON.parse(response.getContentText());
+  if (body.usage) {
+    console.log(JSON.stringify({ operation: "receipt_ocr", model: body.model || model,
+      inputTokens: body.usage.input_tokens, outputTokens: body.usage.output_tokens }));
+  }
   const output = (body.output || []).flatMap(item => item.content || [])
     .find(item => item.type === "output_text");
   if (body.status !== "completed" || !output) throw new Error("画像読取APIから完全な結果を取得できません。");
