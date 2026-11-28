@@ -31,18 +31,15 @@ function sendEmailRequestBuckup() {
 // 振込依頼通知
 function sendFamilyTransferRequest() {
 
-  let imButtonPressed = false
-  let message
-  let flagObj = { hasWarnOrError: false };
-  SPREADSHEET = getSpreadsheet();
-  
-  // getFileIdのエラー確認
+  const flagObj = { hasWarnOrError: false };
+  let message;
   try {
-    message = createMessage()
-  } catch (e) {
-    outputLog("ERROR", "AI分析コメントの取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
+    message = createMessage(getSpreadsheet(), flagObj);
+  } catch (error) {
+    outputLog("ERROR", "月次LINE通知の本文を作成できませんでした。: " + error.message, false, flagObj);
+    throw error;
   }
-  
+
   let options = {
     "method": "post",
     "headers": {
@@ -66,42 +63,24 @@ function getResaltBalance(sheet, dateRange, lastMonthText) {
   // dateRange から先月の列を特定
   let dateValues = sheet.getRange(dateRange).getValues()[0];
   let lastMonthIndex = findMonthIndex_(dateValues, lastMonthText, sheet.getParent().getSpreadsheetTimeZone());
-  let resultTable = ""
 
   if (lastMonthIndex === -1) {
     Logger.log("先月のyyyy/MM表記が見つかりません。");
     return;
   }
   
-  // 項目名を取得
-  let labels = sheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].totalResultRange).getValues().map(row => row[0]);
-
-  // 8〜12行目の値を取得
-  //let values = sheet.getRange(8, lastMonthIndex + 2, 12-8+1, 1).getValues();
-  // 8〜10行目の値を取得
-  let values = sheet.getRange(8, lastMonthIndex + 2, 10-8+1, 1).getValues();
-
-  // 表形式にするため、項目名と値を結びつける
-  let formattedValues = {}; // 項目名と金額の格納用
-
-  // 8〜12行目の値を整形
-  for (let i = 0; i < labels.length; i++) {
-    let label = labels[i];
-    let value = values[i][0];
-
-    // 「貯金率」の場合は100を掛けてパーセント表記にする
-    if (label === "貯蓄率") {
-      value = (isNaN(parseFloat(value)) || value === "") ? 0 : parseFloat(value) * 100; // 100を掛ける
-      formattedValues[label] = value.toFixed(2) + "%"; // 小数点以下2桁でパーセント表示
-      resultTable += `${label}: ${formattedValues[label]}`;
-    } else {
-      // 数値として変換可能な場合のみ、金額を表示
-      value = (isNaN(parseInt(value)) || value === "") ? 0 : parseInt(value); // 数値に変換できない場合は0に
-      formattedValues[labels[i]] = value;
-      resultTable += `${label}: ${value.toLocaleString()}円\n`; // 表形式に追加
+  const labelRange = sheet.getRange(CELL_POSITIONS[SHEET_THOUBOKANRI].totalResultRange);
+  const labels = labelRange.getValues();
+  const values = sheet.getRange(labelRange.getRow(), lastMonthIndex + 2, labels.length, 1).getValues();
+  return labels.map(([label], index) => {
+    const value = values[index][0];
+    if (!label || !Number.isFinite(value)) {
+      throw new Error(lastMonthText + " の収支項目「" + (label || "項目名なし") + "」を確認してください。");
     }
-  }
-  return resultTable
+    return label === "貯蓄率"
+      ? `${label}: ${(value * 100).toFixed(2)}%`
+      : `${label}: ${Math.trunc(value).toLocaleString()}円`;
+  }).join("\n");
 }
 
 // 支出結果を取得
@@ -116,83 +95,73 @@ function getExpenses(sheet, dateRange, lastMonthText) {
     return;
   }
   
-  // 項目名を取得
-  let labels = sheet.getRange(CELL_POSITIONS[SHEET_SISYUTUKANRI].labelRangeCustom).getValues().map(row => row[0]);
-
-  // 4〜25行目の値を取得（行数が変わったときは"25-3"の"25"の部分に最下行番号を設定する）
-  let values = sheet.getRange(4, lastMonthIndex + 2, 25-3, 1).getValues();
-
-  // 表形式にするため、項目名と値を結びつける
-  let formattedValues = {}; // 項目名と金額の格納用
-
-  // 8〜12行目の値を整形
-  for (let i = 0; i < labels.length; i++) {
-    let label = labels[i];
-    let value = values[i][0];
-
-    // 数値として変換可能な場合のみ、金額を表示
-    value = (isNaN(parseInt(value)) || value === "") ? 0 : parseInt(value); // 数値に変換できない場合は0に
-    formattedValues[labels[i]] = value;
-    resultTable += `${label}: ${value.toLocaleString()}円\n`; // 表形式に追加
+  const labelRange = sheet.getRange(CELL_POSITIONS[SHEET_SISYUTUKANRI].labelRangeCustom);
+  const labels = labelRange.getValues();
+  const values = sheet.getRange(labelRange.getRow(), lastMonthIndex + 2, labels.length, 1).getValues();
+  for (const [value] of values) {
+    if (value !== "" && !Number.isFinite(value)) {
+      throw new Error(lastMonthText + " の支出内訳に数値以外の金額があります。");
+    }
   }
-  return resultTable
+  return labels.flatMap(([label], index) => {
+    const value = values[index][0];
+    return label && Number.isFinite(value) ? [`${label}: ${Math.trunc(value).toLocaleString()}円`] : [];
+  }).join("\n");
 }
 
 // LINE通知用メッセージ作成
-function createMessage() {
+function createMessage(spreadsheet = getSpreadsheet(), flagObj = { hasWarnOrError: false }) {
+  const ledger = spreadsheet.getSheetByName(SHEET_THOUBOKANRI);
+  if (!ledger) throw new Error("帳簿管理シートが見つかりません。");
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
+  const { year, month } = getPreviousMonth_(timezone);
+  const targetMonth = `${year}/${String(month).padStart(2, "0")}`;
+  const ledgerRange = CELL_POSITIONS[SHEET_THOUBOKANRI].dateRange;
+  const headers = ledger.getRange(ledgerRange).getValues()[0];
+  const monthIndex = findMonthIndex_(headers, targetMonth, timezone);
+  if (monthIndex === -1) throw new Error("帳簿管理に " + targetMonth + " の見出しがありません。");
 
-  let imButtonPressed = false
-  let tyoubosheet = SPREADSHEET.getSheetByName(SHEET_THOUBOKANRI);
-  let sisyutusheet = SPREADSHEET.getSheetByName(SHEET_SISYUTUKANRI);
-  let tyoubodateRange = CELL_POSITIONS[SHEET_THOUBOKANRI].dateRange;
-  let sisyutudateRange = CELL_POSITIONS[SHEET_SISYUTUKANRI].dateRange;
-  let incomeAndExpenditure
-  let spending
-  let feedBack
+  const balance = getResaltBalance(ledger, ledgerRange, targetMonth);
+  if (!balance?.trim()) throw new Error(targetMonth + " の収支集計がありません。");
 
-  // 設定シート読み込み
-  SHEET_SETTING_CONTENTS = loadSheetSetting(SPREADSHEET);
-  const USER_A_NAME = SHEET_SETTING_CONTENTS.USER_A_NAME;
-  const USER_B_NAME = SHEET_SETTING_CONTENTS.USER_B_NAME;
-
-  // 先月のyyyy/MM表記を生成 (ゼロ埋め対応)
-  const { year, month } = getPreviousMonth_(SPREADSHEET.getSpreadsheetTimeZone());
-  const lastMonthText = `${year}/${String(month).padStart(2, "0")}`;
-  let dateValues = tyoubosheet.getRange(tyoubodateRange).getValues()[0];
-  let lastMonthIndex = findMonthIndex_(dateValues, lastMonthText, SPREADSHEET.getSpreadsheetTimeZone());
-  let headComment = `以下が${month}月の結果です。\nお疲れ様でした!`;
-
-  // 帳簿管理のA8~A12の項目を取得
-  try {
-    incomeAndExpenditure = getResaltBalance(tyoubosheet, tyoubodateRange, lastMonthText)
-  } catch (e) {
-    outputLog("ERROR", "家計簿項目の取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
-  }
-  
-  // 支出管理の全項目を取得
-  try {
-    spending = getExpenses(sisyutusheet, sisyutudateRange, lastMonthText)
-  } catch (e) {
-    outputLog("ERROR", "支出項目の取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
+  const [[amountA], [amountB]] = ledger.getRange(6, monthIndex + 2, 2, 1).getValues();
+  if (![amountA, amountB].every(Number.isFinite)) {
+    throw new Error(targetMonth + " の振込金額を確認してください。");
   }
 
-  // 帳簿管理の6行目と7行目の値を取得
-  let colIndex = lastMonthIndex + 2; // 列番号（1始まり）
-  let row6Value = tyoubosheet.getRange(6, colIndex).getValue(); // 6行目の値
-  let row7Value = tyoubosheet.getRange(7, colIndex).getValue(); // 7行目の値
-  
-  // 収支結果と支出明細をもとにAI分析したコメントを取得
-  try {
-    feedBack = analyzeHouseholdBudget(incomeAndExpenditure, spending)
-  } catch (e) {
-    outputLog("ERROR", "AI分析コメントの取得処理でエラーが発生しました。: " + e.stack, imButtonPressed, flagObj);
+  const { USER_A_NAME, USER_B_NAME } = loadSheetSetting(spreadsheet).settingContents;
+  if (![USER_A_NAME, USER_B_NAME].every(name => typeof name === "string" && name.trim())) {
+    throw new Error("設定シートの振込先の表示名を確認してください。");
   }
 
-  // メッセージ作成
-  let messageBody = `${headComment}\n\n${incomeAndExpenditure}\n${feedBack}\n\n★今月の振込金額\n${USER_A_NAME}：${row6Value.toLocaleString()}円\n${USER_B_NAME}：${row7Value.toLocaleString()}円`;
-  console.log(messageBody);
+  let spending = "";
+  let missingReason = "支出内訳が空欄か、対象月がありません。";
+  try {
+    const expenseSheet = spreadsheet.getSheetByName(SHEET_SISYUTUKANRI);
+    if (!expenseSheet) throw new Error("支出管理シートが見つかりません。");
+    spending = getExpenses(expenseSheet, CELL_POSITIONS[SHEET_SISYUTUKANRI].dateRange, targetMonth);
+  } catch (error) {
+    missingReason = error.message;
+  }
 
-  return messageBody
+  let feedback = "AI分析コメントは取得できませんでした。";
+  if (!spending?.trim()) {
+    feedback = "集計データが不足しているため、AI分析を省略しました。";
+    outputLog("WARN", targetMonth + " のAI分析を省略しました。: " + missingReason, false, flagObj);
+  } else {
+    try {
+      feedback = analyzeHouseholdBudget(balance, spending);
+    } catch (error) {
+      outputLog("ERROR", targetMonth + " のAI分析コメントを取得できませんでした。: " + error.message, false, flagObj);
+    }
+  }
+
+  return [
+    `以下が${month}月の結果です。\nお疲れ様でした!`,
+    balance,
+    feedback,
+    `★今月の振込金額\n${USER_A_NAME}：${amountA.toLocaleString()}円\n${USER_B_NAME}：${amountB.toLocaleString()}円`
+  ].join("\n\n");
 }
 
 function sendMonthlyMigrationFailure_(monthKey, error) {

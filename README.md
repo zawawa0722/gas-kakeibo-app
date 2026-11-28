@@ -60,6 +60,8 @@ CSVは毎月の支出集計に使います。レシートは購入品の内訳�
 | `EMAIL_PRIMARY` | CSV取込結果、CSV配置依頼、バックアップ依頼の通知先 |
 | `EMAIL_SECONDARY` | ソースで読み込む予備のメールアドレス。現行のメール送信では未使用 |
 | `OPENAI_API_KEY` | レシート画像の読み取りと家計分析コメントに使用 |
+| `OPENAI_MODEL` | LINEの家計分析コメントに使うモデル |
+| `OPENAI_FALLBACK_MODEL` | 任意。通常モデルが利用できないことを示す HTTP 404 のときに1度だけ試す予備モデル |
 | `LINE_ACCESS_TOKEN` | LINEの振込依頼を使う場合のチャネルアクセストークン |
 | `RECEIPT_INBOX_FOLDER_ID` | Driveの「読取対象」フォルダのID |
 | `RECEIPT_DONE_FOLDER_ID` | Driveの「読取完了」フォルダのID。読取対象とは別のフォルダを指定 |
