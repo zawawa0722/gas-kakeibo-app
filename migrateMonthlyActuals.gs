@@ -9,8 +9,7 @@ function migrateMonthlyActuals() {
     result = transferMonthlyActuals_(spreadsheet, timezone, monthKey);
   } catch (error) {
     try {
-      GmailApp.sendEmail(EMAIL_PRIMARY, "【家計簿】月次転記に失敗",
-        "対象月: " + (monthKey || "取得できませんでした") + "\n原因: " + error.message);
+      sendMonthlyMigrationFailure_(monthKey, error);
     } catch (notificationError) {
       console.error("月次転記の失敗通知を送信できませんでした。", notificationError);
     }
@@ -18,10 +17,7 @@ function migrateMonthlyActuals() {
   }
 
   try {
-    GmailApp.sendEmail(EMAIL_PRIMARY, "【家計簿】月次転記が完了",
-      ["対象月: " + result.targetMonth,
-        "月次入力: " + result.monthlyInputRows + "行追加",
-        "月次実績: " + result.monthlyActualRows + "行追加"].join("\n"));
+    sendMonthlyMigrationSuccess_(result);
   } catch (error) {
     throw new Error(monthKey + " の月次転記は完了しましたが、結果メールを送信できませんでした。 " + error.message);
   }
@@ -119,7 +115,7 @@ function readMigrationSource_(spreadsheet, name, lastRow, timezone) {
   const months = new Map();
   const duplicates = new Set();
   values[0].slice(1).forEach((value, index) => {
-    const key = migrationMonthKey_(value, timezone, true);
+    const key = normalizeMonthKey_(value, timezone, true);
     if (!key) return;
     if (months.has(key)) duplicates.add(key);
     months.set(key, index + 1);
@@ -148,14 +144,6 @@ function readMigrationSource_(spreadsheet, name, lastRow, timezone) {
   };
 }
 
-function migrationMonthKey_(value, timezone, optional = false) {
-  if (value instanceof Date) return Utilities.formatDate(value, timezone, "yyyy-MM");
-  const match = String(value).trim().match(/^(\d{4})[/-](0?[1-9]|1[0-2])$/);
-  if (!match && optional) return null;
-  if (!match) throw new Error("対象月の形式を確認してください。");
-  return match[1] + "-" + match[2].padStart(2, "0");
-}
-
 function planMigrationAppend_(spreadsheet, name, headers, keyColumns, candidates, timezone, targetMonth) {
   const sheet = spreadsheet.getSheetByName(name);
   if (!sheet) throw new Error(name + "シートが見つかりません。");
@@ -165,12 +153,12 @@ function planMigrationAppend_(spreadsheet, name, headers, keyColumns, candidates
     throw new Error(name + "の見出しを確認してください。");
   }
   const keyFor = row => JSON.stringify([
-    migrationMonthKey_(row[0], timezone), ...row.slice(1, keyColumns)
+    normalizeMonthKey_(row[0], timezone), ...row.slice(1, keyColumns)
   ]);
   const existing = new Map();
   values.slice(1).forEach(row => {
     if (row.every(value => value === "")) return;
-    const month = migrationMonthKey_(row[0], timezone);
+    const month = normalizeMonthKey_(row[0], timezone);
     if (month !== targetMonth) return;
     const key = keyFor(row);
     if (existing.has(key)) throw new Error(name + "に " + targetMonth + " の重複行があります。 " + key);

@@ -65,7 +65,7 @@ function getResaltBalance(sheet, dateRange, lastMonthText) {
 
   // dateRange から先月の列を特定
   let dateValues = sheet.getRange(dateRange).getValues()[0];
-  let lastMonthIndex = dateValues.indexOf(lastMonthText);
+  let lastMonthIndex = findMonthIndex_(dateValues, lastMonthText, sheet.getParent().getSpreadsheetTimeZone());
   let resultTable = ""
 
   if (lastMonthIndex === -1) {
@@ -108,7 +108,7 @@ function getResaltBalance(sheet, dateRange, lastMonthText) {
 function getExpenses(sheet, dateRange, lastMonthText) {
   // dateRange から先月の列を特定
   let dateValues = sheet.getRange(dateRange).getValues()[0];
-  let lastMonthIndex = dateValues.indexOf(lastMonthText);
+  let lastMonthIndex = findMonthIndex_(dateValues, lastMonthText, sheet.getParent().getSpreadsheetTimeZone());
   let resultTable = ""
 
   if (lastMonthIndex === -1) {
@@ -159,7 +159,7 @@ function createMessage() {
   const { year, month } = getPreviousMonth_(SPREADSHEET.getSpreadsheetTimeZone());
   const lastMonthText = `${year}/${String(month).padStart(2, "0")}`;
   let dateValues = tyoubosheet.getRange(tyoubodateRange).getValues()[0];
-  let lastMonthIndex = dateValues.indexOf(lastMonthText);
+  let lastMonthIndex = findMonthIndex_(dateValues, lastMonthText, SPREADSHEET.getSpreadsheetTimeZone());
   let headComment = `以下が${month}月の結果です。\nお疲れ様でした!`;
 
   // 帳簿管理のA8~A12の項目を取得
@@ -193,4 +193,16 @@ function createMessage() {
   console.log(messageBody);
 
   return messageBody
+}
+
+function sendMonthlyMigrationFailure_(monthKey, error) {
+  GmailApp.sendEmail(EMAIL_PRIMARY, "【家計簿】月次転記に失敗",
+    "対象月: " + (monthKey || "取得できませんでした") + "\n原因: " + error.message);
+}
+
+function sendMonthlyMigrationSuccess_(result) {
+  GmailApp.sendEmail(EMAIL_PRIMARY, "【家計簿】月次転記が完了",
+    ["対象月: " + result.targetMonth,
+      "月次入力: " + result.monthlyInputRows + "行追加",
+      "月次実績: " + result.monthlyActualRows + "行追加"].join("\n"));
 }

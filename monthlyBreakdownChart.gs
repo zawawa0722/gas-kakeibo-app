@@ -30,7 +30,7 @@ function createDynamicPieChart(sheet, yearCell, monthCell, labelRange, dateRange
   let targetDate = `${year}/${month.toString().padStart(2, "0")}`;
 
   let headers = sheet.getRange(dateRange).getValues()[0]; // 月の年月 (B3:M3など)
-  let columnIndex = headers.indexOf(targetDate) + 2; // 列インデックスを取得
+  let columnIndex = findMonthIndex_(headers, targetDate, sheet.getParent().getSpreadsheetTimeZone()) + 2; // 列インデックスを取得
 
   if (columnIndex === 1) {
     SpreadsheetApp.getUi().alert("指定された年月が見つかりません。");

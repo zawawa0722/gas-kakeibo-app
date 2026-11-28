@@ -182,9 +182,12 @@ flowchart TD
 | ファイル | 役割 |
 |---|---|
 | [config.gs](config.gs) | シート名、セル位置、支出カテゴリ、プロパティ |
-| [initproc.gs](initproc.gs)・[checkProc.gs](checkProc.gs) | 設定・CSVの取得、対象月・出力先の確認 |
+| [spreadsheetSettings.gs](spreadsheetSettings.gs) | スプレッドシートと設定シートの取得 |
+| [csvImportEntryPoints.gs](csvImportEntryPoints.gs)・[csvImportRows.gs](csvImportRows.gs)・[csvImportValidation.gs](csvImportValidation.gs) | 取込ボタン、CSV明細抽出、取込前後の確認 |
+| [oneBankCsv.gs](oneBankCsv.gs) | ワンバンクCSV検索（同名候補が複数あるときはエラー） |
+| [monthUtils.gs](monthUtils.gs) | 前月計算と年月見出しの照合 |
 | [importCsv.gs](importCsv.gs) | ワンバンク明細の分類と月別集計 |
 | [importReceipts.gs](importReceipts.gs) | レシートの読取、検算、保存、画像移動 |
 | [migrateMonthlyActuals.gs](migrateMonthlyActuals.gs) | 前月分の月次入力・月次実績への転記 |
-| [addGraph.gs](addGraph.gs) | グラフ更新 |
-| [notification.gs](notification.gs)・[analyzeAi.gs](analyzeAi.gs)・[outputlog.gs](outputlog.gs) | メール・LINE通知、AIコメント、ログ |
+| [monthlyBreakdownChart.gs](monthlyBreakdownChart.gs) | グラフ更新 |
+| [notification.gs](notification.gs)・[analyzeAi.gs](analyzeAi.gs)・[logging.gs](logging.gs) | メール・LINE通知、AIコメント、ログ |

@@ -53,7 +53,7 @@ function getMobileDashboardMonth(month) {
   }
   let available = false;
   for (const [date, kind, category, detail, amount] of actuals) {
-    if (migrationMonthKey_(date, timezone, true) !== month) continue;
+    if (normalizeMonthKey_(date, timezone, true) !== month) continue;
     available = true;
     addRow(kind, String(category), String(detail || ""), amount);
   }
@@ -70,18 +70,7 @@ function validateMobileDashboardRequest_(month) {
 
 function getMobileDashboardTransactions(month) {
   validateMobileDashboardRequest_(month);
-  const folders = DriveApp.getFoldersByName("ワンバンク");
-  if (!folders.hasNext()) return [];
-  const filename = "ワンバンク支出_" + month.slice(0, 4) + ".csv";
-  const files = folders.next().getFiles();
-  const normalizedName = normalizeString(filename);
-  let file = null;
-  while (files.hasNext()) {
-    const candidate = files.next();
-    if (normalizeString(candidate.getName()) !== normalizedName) continue;
-    if (file) throw new Error("同じ名前のワンバンクCSVが複数あります。");
-    file = candidate;
-  }
+  const file = findOneBankCsv_(month.slice(0, 4));
   if (!file) return [];
 
   const rows = Utilities.parseCsv(file.getBlob().getDataAsString().replace(/^\uFEFF/, ""));
