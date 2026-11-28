@@ -55,12 +55,12 @@ const CELL_POSITIONS = {
     chartPosition: "A30"
   },
   [SHEET_SISYUTUKANRI]: {
-    yearCell: "A31",
-    monthCell: "B31",
+    yearCell: "A32",
+    monthCell: "B32",
     labelRange: "A4:A26",
     labelRangeCustom: "A4:A25",
     dateRange: "B3:M3",
-    chartPosition: "A33"
+    chartPosition: "A34"
   },
   [SHEET_SYUNYUKANRI]: {
     yearCell: "A14",
