@@ -311,8 +311,8 @@
     const byAmount = [...ranked].sort((a, b) => b.amount - a.amount);
     const top = previous
       ? ranked.filter(row => row.increase > 0).sort((a, b) => b.increase - a.increase)
-      : byAmount.filter(row => row.amount > 0);
-    byId('category-heading').textContent = previous ? '前月より増えた支出' : '支出上位';
+      : byAmount.filter(row => row.amount > 0 && !data.fixedCategories.includes(row.name));
+    byId('category-heading').textContent = previous ? '前月より増えた支出' : '変動費の支出上位';
     byId('category-panel').hidden = !data.available;
     const list = byId('category-content');
     list.replaceChildren();
@@ -322,7 +322,7 @@
       if (previous) item.append(element('strong', 'warning', signedYen(row.increase)));
       list.append(item);
     }
-    if (!top.length) list.append(element('li', 'empty', previous ? '前月より増えた費目はありません。' : '支出はありません。'));
+    if (!top.length) list.append(element('li', 'empty', previous ? '前月より増えた費目はありません。' : '変動費の支出はありません。'));
     byId('categories').disabled = !ranked.length;
     byId('categories').onclick = () => {
       const details = element('ul', 'list', '');
@@ -427,6 +427,7 @@
     return {
       rows: month === demoMonth ? rows : [],
       available: month === demoMonth, previousRows: null, actuals, errors: {},
+      fixedCategories: ['家賃', '通信費', '分割費', 'ローン'],
       budget: month === demoMonth ? { limit: 157000, used: 74600, planned: true } : null,
       installments: {
         nextMonth: monthKey(demoMonth + 1), next: 14630, remaining: 87780,

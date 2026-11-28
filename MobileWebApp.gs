@@ -1,3 +1,5 @@
+const MOBILE_FIXED_EXPENSE_CATEGORIES = ["家賃", "通信費", "分割費", "ローン"];
+
 function doGet() {
   return HtmlService.createHtmlOutputFromFile("mobile/MobileDashboard")
     .setTitle("家計簿")
@@ -151,7 +153,8 @@ function getMobileDashboardOverview(month) {
     console.error(error);
     errors.installments = "分割払い管理シートを確認してください。";
   }
-  return { ...data, actuals, previousRows, budget, installments, errors };
+  return { ...data, actuals, previousRows, budget, installments, errors,
+    fixedCategories: MOBILE_FIXED_EXPENSE_CATEGORIES };
 }
 
 function shiftMobileMonth_(key, offset) {
@@ -181,7 +184,7 @@ function readMobileBudget_(spreadsheet, month, rows, timezone) {
   const income = plannedIncome ?? sum(rows.filter(row => row.kind === "収入"));
   if (plannedIncome === null && income <= 0) return null;
 
-  const fixedCategories = new Set(["家賃", "通信費", "分割費", "ローン"]);
+  const fixedCategories = new Set(MOBILE_FIXED_EXPENSE_CATEGORIES);
   const expenses = rows.filter(row => row.kind === "支出");
   const fixed = -sum(expenses.filter(row => fixedCategories.has(row.category)));
   const used = -sum(expenses.filter(row => !fixedCategories.has(row.category)));
