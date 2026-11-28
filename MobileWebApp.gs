@@ -1,4 +1,6 @@
-const MOBILE_FIXED_EXPENSE_CATEGORIES = ["家賃", "通信費", "分割費", "ローン"];
+const MOBILE_FIXED_EXPENSE_CATEGORIES = ["家賃", "家賃代", "住居", "住居費", "住宅費",
+  "通信費", "通信料金", "分割費", "分割払い", "分割支払", "分割支払い",
+  "ローン", "ローン返済", "ローン返済額", "住宅ローン"];
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile("mobile/MobileDashboard")
@@ -26,7 +28,8 @@ function readMobileDashboardMonth_(spreadsheet, month, sources = new Map()) {
     if (!Number.isFinite(amount) || !["収入", "支出"].includes(kind)) {
       throw new Error("月別内訳の区分または金額を確認してください。");
     }
-    rows.push({ kind, category, name: detail || category, amount: kind === "支出" ? -amount : amount });
+    rows.push({ kind, category, name: detail || category, fixedExpense: kind === "支出" &&
+      isMobileFixedExpense_(category), amount: kind === "支出" ? -amount : amount });
   };
 
   if (month.startsWith(currentYear + "-")) {
@@ -157,8 +160,11 @@ function getMobileDashboardOverview(month) {
     console.error(error);
     errors.installments = "分割払い管理シートを確認してください。";
   }
-  return { ...data, actuals, previousRows, budget, installments, errors,
-    fixedCategories: MOBILE_FIXED_EXPENSE_CATEGORIES };
+  return { ...data, actuals, previousRows, budget, installments, errors };
+}
+
+function isMobileFixedExpense_(category) {
+  return MOBILE_FIXED_EXPENSE_CATEGORIES.includes(String(category).normalize("NFKC").replace(/\s/g, ""));
 }
 
 function shiftMobileMonth_(key, offset) {
@@ -188,10 +194,9 @@ function readMobileBudget_(spreadsheet, month, rows, timezone) {
   const income = plannedIncome ?? sum(rows.filter(row => row.kind === "収入"));
   if (plannedIncome === null && income <= 0) return null;
 
-  const fixedCategories = new Set(MOBILE_FIXED_EXPENSE_CATEGORIES);
   const expenses = rows.filter(row => row.kind === "支出");
-  const fixed = -sum(expenses.filter(row => fixedCategories.has(row.category)));
-  const used = -sum(expenses.filter(row => !fixedCategories.has(row.category)));
+  const fixed = -sum(expenses.filter(row => isMobileFixedExpense_(row.category)));
+  const used = -sum(expenses.filter(row => !isMobileFixedExpense_(row.category)));
   return { limit: income - fixed, used, planned: plannedIncome !== null };
 }
 

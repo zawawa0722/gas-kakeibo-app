@@ -8,22 +8,23 @@
   :root {
     color-scheme: light;
     --ink: #102641;
-    --paper: #f7efe4;
+    --paper: #fff8ed;
     --teal: #765034;
     --budget: #765034;
     --line: #e6d8c8;
-    --hero: linear-gradient(140deg, #90613d, #67422f);
+    --hero: linear-gradient(140deg, #ecd0a4, #fff4df);
     --warning: #b63842;
+    --hero-text: #3e2b1f;
     --nav-height: 68px;
     font: 16px/1.5 system-ui, "Hiragino Sans", "Yu Gothic", sans-serif;
   }
   :root[data-theme="emerald"] {
-    --paper: #e5f7ef; --teal: #00664e; --budget: #00664e; --line: #c8e7d9;
-    --hero: linear-gradient(140deg, #008060, #005d49);
+    --paper: #e5f9ef; --teal: #00664e; --budget: #00664e; --line: #c8e7d9;
+    --hero: linear-gradient(140deg, #74eab7, #13b581);
   }
   :root[data-theme="ocean"] {
-    --paper: #e6f8fa; --teal: #005e9d; --budget: #005e9d; --line: #cce7ed;
-    --hero: linear-gradient(140deg, #007f91, #0956ad);
+    --paper: #e6fafb; --teal: #005e9d; --budget: #005e9d; --line: #cce7ed;
+    --hero: linear-gradient(140deg, #7be5e8, #2aa4db);
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--paper); color: var(--ink); }
@@ -41,13 +42,17 @@
   .month button { width: 44px; height: 44px; font-size: 1.8rem; color: var(--teal); }
   #month-label { font-size: 1.35rem; font-weight: 800; }
   .summary {
-    overflow: hidden; border-radius: 18px; padding: 12px 8px 8px; color: white;
+    overflow: hidden; border-radius: 18px; padding: 12px 8px 8px; color: var(--hero-text);
     background: var(--hero);
   }
   .balance { text-align: center; padding-bottom: 9px; font-weight: 700; }
   #balance { display: block; font-size: clamp(2rem, 9vw, 2.9rem); line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .balance #balance { width: fit-content; max-width: 100%; margin: 4px auto; padding: 4px 12px;
+    border-radius: 12px; background: #ffffffdf; overflow-wrap: anywhere; }
+  #balance.positive { color: #006443; background: #eefcf3; }
+  #balance.negative { color: #9c293d; background: #fff0f0; }
   .metrics { display: grid; grid-template-columns: 1fr 1fr; border-radius: 13px; overflow: hidden; }
-  .metric { text-align: left; padding: 7px 9px; color: white; min-width: 0; }
+  .metric { text-align: left; padding: 7px 9px; color: var(--hero-text); min-width: 0; }
   .metric + .metric { border-left: 1px solid #ffffff80; }
   .metrics { border-top: 1px solid #ffffff80; }
   .metric strong { display: block; font-size: clamp(1rem, 4.6vw, 1.45rem); overflow-wrap: anywhere; }
@@ -86,23 +91,38 @@
   .bar.negative { inset: 50% 18% auto; background: var(--warning); border-radius: 0 0 4px 4px; }
   .bar.partial { background: transparent; border: 2px solid var(--teal); }
   .bar.partial.negative { border-color: var(--warning); }
-  .setting-row select { margin-left: auto; font: inherit; min-height: 44px; }
+  .theme-picker { display: grid; gap: 6px; }
+  .theme-choice { text-align: left; min-height: 44px; padding: 8px 12px; border-radius: 10px; background: white; }
+  .theme-choice[aria-pressed="true"] { color: var(--teal); background: var(--line); font-weight: 700; }
+  .theme-current { margin-left: auto; }
+  .installment-totals > div { padding: 9px; border-radius: 10px; background: var(--paper); overflow-wrap: anywhere; }
+  .installment-list { display: grid; gap: 8px; }
+  .installment-entry { background: white; padding: 10px; border-radius: 12px; overflow-wrap: anywhere; }
+  .installment-entry h3 { margin: 0 0 6px; font-size: 1rem; }
   nav { position: fixed; inset: auto 0 0; max-width: 520px; margin: auto; background: var(--paper); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, 1fr); padding-bottom: env(safe-area-inset-bottom); }
   nav button { min-height: var(--nav-height); font-size: .82rem; font-weight: 700; }
   nav [aria-current] { color: var(--teal); }
   nav svg { width: 25px; height: 25px; display: block; margin: 0 auto 2px; stroke: currentColor; fill: none; stroke-width: 1.8; }
   .camera { display: block; width: 44px; padding: 3px; margin: 0 auto 2px; border-radius: 8px; background: var(--teal); color: white; }
   .camera svg { margin: auto; }
-  dialog { color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 14px; width: min(92vw, 460px); max-height: 80dvh; padding: 16px; }
+  dialog { color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 14px; width: min(92vw, 460px); max-height: 85dvh; max-width: calc(100vw - 24px); overflow-x: hidden; padding: 16px; }
   dialog::backdrop { background: #10264180; }
   #dialog-content { margin: 12px 0; }
-  .setting-row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
-  .receipt-form { display: grid; gap: 12px; margin: 12px 0; }
-  .receipt-form input { max-width: 100%; font: inherit; color: inherit; }
-  .receipt-preview { width: 100%; max-height: 40dvh; object-fit: contain; border-radius: 8px; }
-  .receipt-submit { min-height: 44px; border-radius: 8px; background: var(--teal); color: white; font-weight: 700; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; }
+  .dialog-actions { display: flex; justify-content: center; }
+  .dialog-close { border: 0; background: transparent; padding: 0 16px; }
+  #receipt-title { text-align: center; }
+  .receipt-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 12px 0; text-align: center; }
+  .receipt-capture { position: relative; display: grid; place-items: center; gap: 4px; padding: 16px 8px;
+    border-radius: 12px; border: 1px dashed var(--teal); background: white; color: var(--teal); cursor: pointer; }
+  .receipt-capture:focus-within { outline: 2px solid var(--teal); }
+  .receipt-capture input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .receipt-preview { display: block; width: 100%; max-height: 36dvh; object-fit: contain; border-radius: 10px; background: white; }
+  .receipt-preview[hidden] { display: none; }
+  .receipt-submit { width: 100%; min-height: 48px; border-radius: 10px; background: var(--teal); color: white; font-weight: 700; }
   .receipt-submit:disabled { background: var(--line); color: var(--ink); }
   #receipt-status { overflow-wrap: anywhere; }
+  #receipt-status:empty { display: none; }
   .empty { padding: 10px; color: #526071; }
 </style>
 </head>
@@ -161,21 +181,24 @@
   </nav>
 </div>
 <dialog id="detail" aria-labelledby="dialog-title">
-  <h2 id="dialog-title"></h2>
+  <h2 id="dialog-title" tabindex="-1" autofocus></h2>
   <div id="dialog-content"></div>
-  <form method="dialog"><button class="link">閉じる</button></form>
+  <form method="dialog" class="dialog-actions"><button class="link dialog-close">閉じる</button></form>
 </dialog>
 <dialog id="receipt-dialog" aria-labelledby="receipt-title">
-  <h2 id="receipt-title">レシート登録</h2>
+  <h2 id="receipt-title" tabindex="-1" autofocus>レシート登録</h2>
   <form id="receipt-form" class="receipt-form">
-    <label for="receipt-image">レシートを1枚撮影または選択</label>
-    <input id="receipt-image" type="file" accept="image/*" capture="environment">
+    <label class="receipt-capture">
+      <strong id="receipt-pick-label">撮影・画像を選択</strong>
+      <span class="caption">レシート全体が写るように1枚撮影</span>
+      <input id="receipt-image" type="file" accept="image/*" capture="environment" aria-labelledby="receipt-pick-label">
+    </label>
     <img class="receipt-preview" id="receipt-preview" alt="選んだレシート" hidden>
     <p class="caption">画像をOpenAIに送信し、読み取った内容を家計簿に保存します。</p>
     <button class="receipt-submit" id="receipt-submit" type="submit" disabled>読み取って登録</button>
     <p id="receipt-status" role="status"></p>
   </form>
-  <form method="dialog"><button id="receipt-close" class="link">閉じる</button></form>
+  <form method="dialog" class="dialog-actions"><button id="receipt-close" class="link dialog-close">閉じる</button></form>
 </dialog>
 <script>
   'use strict';
@@ -264,30 +287,37 @@
   }
 
   function renderSettings() {
-    const label = element('label', 'setting-row', '配色テーマ');
-    const select = document.createElement('select');
-    for (const [id, name] of Object.entries(themes)) {
-      const option = element('option', '', name);
-      option.value = id;
-      select.append(option);
-    }
-    select.value = theme;
-    select.addEventListener('change', () => {
-      theme = select.value;
-      document.documentElement.dataset.theme = theme;
-      try {
-        localStorage.setItem(preferenceKey, theme);
-      } catch {
-        // 保存領域を利用できない場合も現在の画面には反映する。
+    const button = element('button', 'setting-row link', '配色テーマ');
+    button.type = 'button';
+    button.append(element('span', 'theme-current', themes[theme] + ' ›'));
+    button.addEventListener('click', () => {
+      const choices = element('div', 'theme-picker', '');
+      for (const [id, name] of Object.entries(themes)) {
+        const choice = element('button', 'theme-choice', name + (theme === id ? ' ✓' : ''));
+        choice.type = 'button';
+        choice.setAttribute('aria-pressed', String(theme === id));
+        choice.addEventListener('click', () => {
+          theme = id;
+          document.documentElement.dataset.theme = theme;
+          try {
+            localStorage.setItem(preferenceKey, theme);
+          } catch {
+            // 保存領域を利用できない場合も現在の画面には反映する。
+          }
+          renderSettings();
+          byId('dialog-content').querySelector('button').focus();
+        });
+        choices.append(choice);
       }
+      openDialog('配色テーマ', choices);
+      choices.querySelector('[aria-pressed="true"]').focus();
     });
-    label.append(select);
-    openDialog('ホーム表示設定', label);
+    openDialog('ホーム表示設定', button);
   }
 
   function expenseGroups(rows) {
     const groups = new Map();
-    for (const row of rows.filter(row => row.kind === '支出')) {
+    for (const row of rows.filter(row => row.kind === '支出' && !row.fixedExpense)) {
       if (!groups.has(row.category)) groups.set(row.category, []);
       groups.get(row.category).push(row);
     }
@@ -330,8 +360,8 @@
     const byAmount = [...ranked].sort((a, b) => b.amount - a.amount);
     const top = previous
       ? ranked.filter(row => row.increase > 0).sort((a, b) => b.increase - a.increase)
-      : byAmount.filter(row => row.amount > 0 && !data.fixedCategories.includes(row.name));
-    byId('category-heading').textContent = previous ? '前月より増えた支出' : '変動費の支出上位';
+      : byAmount.filter(row => row.amount > 0);
+    byId('category-heading').textContent = previous && byAmount.some(row => row.amount > 0) ? '前月より増えた変動費' : '変動費の支出上位';
     byId('category-panel').hidden = !data.available;
     const list = byId('category-content');
     list.replaceChildren();
@@ -341,7 +371,7 @@
       if (previous) item.append(element('strong', 'warning', signedYen(row.increase)));
       list.append(item);
     }
-    if (!top.length) list.append(element('li', 'empty', previous ? '前月より増えた費目はありません。' : '変動費の支出はありません。'));
+    if (!top.length) list.append(element('li', 'empty', previous && byAmount.some(row => row.amount > 0) ? '前月より増えた費目はありません。' : '変動費の支出登録が見つかりません。'));
     byId('categories').disabled = !ranked.length;
     byId('categories').onclick = () => {
       const details = element('ul', 'list', '');
@@ -351,7 +381,7 @@
           element('strong', 'amount', formatYen(row.amount))
         ], () => showTransactions(row.rows, month, row.name));
       }
-      openDialog('費目別支出', details);
+      openDialog('費目別の変動費', details);
     };
   }
 
@@ -365,21 +395,31 @@
       content.append(element('p', 'empty', data.errors.installments || '分割払い管理シートがありません。'));
       return;
     }
+    if (!plan.items.length) {
+      content.append(element('p', 'empty', '支払い予定はありません。'));
+      return;
+    }
+    const nextLabel = monthNumber(monthIndex(plan.nextMonth)) + '月の支払い予定';
+    content.append(installmentAmounts(nextLabel, plan.next, plan.remaining));
+    button.onclick = () => {
+      const list = element('div', 'installment-list', '');
+      for (const item of plan.items) {
+        const entry = element('article', 'installment-entry', '');
+        entry.append(element('h3', '', item.name), installmentAmounts(nextLabel, item.next, item.remaining));
+        list.append(entry);
+      }
+      openDialog('分割払いの支払い予定', list);
+    };
+  }
+
+  function installmentAmounts(nextLabel, next, remaining) {
     const totals = element('div', 'installment-totals', '');
-    for (const [label, amount] of [['来月（' + monthNumber(monthIndex(plan.nextMonth)) + '月）', plan.next], ['未払い総額（予定）', plan.remaining]]) {
+    for (const [label, amount] of [[nextLabel, next], ['未払い総額（予定）', remaining]]) {
       const column = element('div', 'caption', label);
       column.append(element('strong', '', formatYen(amount)));
       totals.append(column);
     }
-    content.append(totals);
-    button.onclick = () => {
-      const list = element('ul', 'figures', '');
-      for (const item of plan.items) {
-        list.append(element('li', '', item.name + '　来月 ' + formatYen(item.next) +
-          ' ／ 未払い ' + formatYen(item.remaining)));
-      }
-      openDialog('分割払いの支払い予定', list);
-    };
+    return totals;
   }
 
   function renderTrend(actuals) {
@@ -420,7 +460,9 @@
     const income = data.rows.filter(row => row.kind === '収入');
     const expense = data.rows.filter(row => row.kind === '支出');
     byId('summary').hidden = !data.available;
-    byId('balance').textContent = signedYen(sum(data.rows));
+    const balance = sum(data.rows);
+    byId('balance').textContent = signedYen(balance);
+    byId('balance').className = balance > 0 ? 'positive' : balance < 0 ? 'negative' : '';
     byId('income-total').textContent = formatYen(sum(income));
     byId('expense-total').textContent = formatYen(-sum(expense));
     byId('income').onclick = () => showTransactions(income, month, monthName(month) + 'の収入');
@@ -442,11 +484,11 @@
       ['収入', '給与', 350000], ['支出', '家賃', -155000], ['支出', '通信費', -8000],
       ['支出', '分割費', -14630], ['支出', 'ローン', -15370], ['支出', '食品', -48200],
       ['支出', '生活用品', -12300], ['支出', '外食', -9800], ['支出', '交通', -4300]
-    ].map(([kind, category, amount]) => ({ kind, category, name: category, amount }));
+    ].map(([kind, category, amount]) => ({ kind, category, name: category, amount,
+      fixedExpense: ['家賃', '通信費', '分割費', 'ローン'].includes(category) }));
     return {
       rows: month === demoMonth ? rows : [],
       available: month === demoMonth, previousRows: null, actuals, errors: {},
-      fixedCategories: ['家賃', '通信費', '分割費', 'ローン'],
       budget: month === demoMonth ? { limit: 157000, used: 74600, planned: true } : null,
       installments: {
         nextMonth: monthKey(demoMonth + 1), next: 14630, remaining: 87780,
@@ -523,7 +565,7 @@
     } catch {
       throw new Error('画像を開けませんでした。カメラで撮影するか、JPEGまたはPNGを選び直してください。');
     }
-    const scale = Math.min(1, 2400 / Math.max(image.naturalWidth, image.naturalHeight));
+    const scale = Math.min(1, 3200 / Math.max(image.naturalWidth, image.naturalHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -531,7 +573,9 @@
     context.fillStyle = '#fff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+    const jpeg = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+    return jpeg.length <= Math.ceil(4 * 1024 * 1024 / 3) * 4
+      ? jpeg : canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
   }
 
   byId('receipt-form').addEventListener('submit', async event => {
