@@ -78,9 +78,6 @@ const CELL_POSITIONS = {
   }
 };
 
-// 月次転記の対象年を選択するセル
-const MONTHLY_MIGRATION_YEAR_CELL = "D16";
-
 // 各シートのバックアップ範囲
 const BACKUP_RANGE = {
   [SHEET_THOUBOKANRI]: {

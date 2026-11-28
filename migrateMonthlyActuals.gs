@@ -1,90 +1,3 @@
-function onOpen() {
-  SpreadsheetApp.getUi().createMenu("月次転記")
-    .addItem("プレビューして転記", "confirmMonthlyMigration")
-    .addItem("候補年を更新", "refreshMonthlyMigrationYears")
-    .addToUi();
-}
-
-function refreshMonthlyMigrationYears() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const timezone = spreadsheet.getSpreadsheetTimeZone();
-  const [year, month] = Utilities.formatDate(new Date(), timezone, "yyyy-MM").split("-").map(Number);
-  const years = monthlyMigrationYears_(readMonthlyMigrationSources_(spreadsheet, timezone), year, month);
-  const selector = getMonthlyMigrationYearSelector_(spreadsheet);
-  if (!years.length) {
-    selector.clearDataValidations().clearContent();
-    SpreadsheetApp.getUi().alert("転記元4シートに対象月の揃った年がありません。");
-    return;
-  }
-  selector.setDataValidation(SpreadsheetApp.newDataValidation()
-    .requireValueInList(years.map(String), true).setAllowInvalid(false).build());
-  if (!years.includes(Number(selector.getValue()))) selector.setValue(years[0]);
-}
-
-function confirmMonthlyMigration() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const ui = SpreadsheetApp.getUi();
-  try {
-    const year = getMonthlyMigrationYear_(spreadsheet);
-    const preview = migrateMonthlyActuals_(spreadsheet, year);
-    const message = [
-      year + "年1月〜" + preview.lastMonth + "月分",
-      "月次入力 " + preview.monthlyInputRows + "行／月次実績 " + preview.monthlyActualRows + "行",
-      ...(preview.includesCurrentMonth ? ["当月分には現時点の値が含まれます。"] : [])
-    ].join("\n");
-    if (!preview.monthlyInputRows && !preview.monthlyActualRows) {
-      ui.alert("月次転記", message + "\n追加する行はありません。", ui.ButtonSet.OK);
-      return;
-    }
-    if (ui.alert("月次転記の確認", message + "\n転記しますか？", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
-    migrateMonthlyActuals_(spreadsheet, year, preview);
-    ui.alert("月次転記が完了しました。", message, ui.ButtonSet.OK);
-  } catch (error) {
-    ui.alert("月次転記", error.message, ui.ButtonSet.OK);
-  }
-}
-
-function readMonthlyMigrationSources_(spreadsheet, timezone) {
-  return [
-    readMigrationSource_(spreadsheet, SHEET_THOUBOKANRI, 7, timezone),
-    readMigrationSource_(spreadsheet, SHEET_SYUNYUKANRI, 10, timezone),
-    readMigrationSource_(spreadsheet, SHEET_SISYUTUKANRI, 28, timezone),
-    readMigrationSource_(spreadsheet, SHEET_ONLINE, 9, timezone)
-  ];
-}
-
-function monthlyMigrationYears_(sources, currentYear, currentMonth) {
-  const years = new Set(Array.from(sources[0].months.keys(), key => Number(key.slice(0, 4))));
-  return Array.from(years).filter(year => {
-    if (year > currentYear) return false;
-    const lastMonth = year === currentYear ? currentMonth : 12;
-    const months = Array.from({ length: lastMonth }, (_, index) =>
-      year + "-" + String(index + 1).padStart(2, "0"));
-    return sources.every(source => months.every(month => source.months.has(month)) &&
-      months.some(month => source.hasData(month)));
-  }).sort((a, b) => b - a);
-}
-
-function getMonthlyMigrationYearSelector_(spreadsheet) {
-  const sheet = spreadsheet.getSheetByName(SHEET_THOUBOKANRI);
-  if (!sheet) throw new Error(SHEET_THOUBOKANRI + "シートが見つかりません。");
-  return sheet.getRange(MONTHLY_MIGRATION_YEAR_CELL);
-}
-
-function getMonthlyMigrationYear_(spreadsheet) {
-  const value = getMonthlyMigrationYearSelector_(spreadsheet).getValue();
-  if ((typeof value !== "number" && typeof value !== "string") ||
-      !/^\d{4}$/.test(String(value).trim()) || Number(value) < 1000) {
-    throw new Error("帳簿管理の「転記対象年」を選択してください。");
-  }
-  return Number(value);
-}
-
-function previewMonthlyActuals() {
-  const spreadsheet = getSpreadsheet();
-  return migrateMonthlyActuals_(spreadsheet, getMonthlyMigrationYear_(spreadsheet));
-}
-
 function migrateMonthlyActuals() {
   const spreadsheet = getSpreadsheet();
   const timezone = spreadsheet.getSpreadsheetTimeZone();
@@ -92,29 +5,15 @@ function migrateMonthlyActuals() {
     .split("-").map(Number);
   const year = currentMonth === 1 ? currentYear - 1 : currentYear;
   const month = currentMonth === 1 ? 12 : currentMonth - 1;
-  return migrateMonthlyActuals_(spreadsheet, year, null, month);
-}
-
-function migrateMonthlyActuals_(spreadsheet, year, approvedPreview, targetMonth) {
+  const monthKey = year + "-" + String(month).padStart(2, "0");
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const timezone = spreadsheet.getSpreadsheetTimeZone();
-    const [currentYear, currentMonth] = Utilities.formatDate(new Date(), timezone, "yyyy-MM")
-      .split("-").map(Number);
-    const firstMonth = targetMonth ?? 1;
-    const lastMonth = targetMonth ?? (currentYear === year ? currentMonth : 12);
-    const monthKeys = Array.from({ length: lastMonth - firstMonth + 1 }, (_, index) =>
-      year + "-" + String(firstMonth + index).padStart(2, "0"));
     const sources = readMonthlyMigrationSources_(spreadsheet, timezone);
-    const [ledger, income, expenses, online] = sources;
-    if (targetMonth !== undefined) {
-      if (!sources.every(source => source.months.has(monthKeys[0]))) {
-        throw new Error(monthKeys[0] + " の年月見出しが転記元の4シートに揃っていません。");
-      }
-    } else if (!monthlyMigrationYears_(sources, currentYear, currentMonth).includes(year)) {
-      throw new Error("選択年の対象月が転記元の4シートに揃っていません。候補年を更新してください。");
+    if (!sources.every(source => source.months.has(monthKey))) {
+      throw new Error(monthKey + " の年月見出しが転記元の4シートに揃っていません。");
     }
+    const [ledger, income, expenses, online] = sources;
     const settings = loadSheetSetting(spreadsheet).settingContents;
     const users = [
       ["USER_A", settings.USER_A_NAME],
@@ -127,70 +26,66 @@ function migrateMonthlyActuals_(spreadsheet, year, approvedPreview, targetMonth)
 
     const inputRows = [];
     const actualRows = [];
-    for (const monthKey of monthKeys) {
-      const date = Utilities.parseDate(monthKey + "-01", timezone, "yyyy-MM-dd");
-      for (const [userId, name] of users) {
-        const provisional = ledger.amount(name + "仮入金額", monthKey);
-        const actual = ledger.amount(name + "実入金額", monthKey);
-        if (provisional !== "" || actual !== "") {
-          inputRows.push([date, userId, provisional, actual]);
-        }
+    const date = Utilities.parseDate(monthKey + "-01", timezone, "yyyy-MM-dd");
+    for (const [userId, name] of users) {
+      const provisional = ledger.amount(name + "仮入金額", monthKey);
+      const actual = ledger.amount(name + "実入金額", monthKey);
+      if (provisional !== "" || actual !== "") {
+        inputRows.push([date, userId, provisional, actual]);
       }
+    }
 
-      let incomeSum = 0;
-      let expenseSum = 0;
-      let onlineSum = 0;
-      for (const category of income.labels.filter(label => label !== "収入総額")) {
-        const amount = income.amount(category, monthKey);
-        if (amount === "") continue;
-        actualRows.push([date, "収入", category, "", amount]);
-        incomeSum += amount;
-      }
-      for (const category of expenses.labels.filter(label => !["オンライン", "支出総額"].includes(label))) {
-        const amount = expenses.amount(category, monthKey);
-        if (amount === "") continue;
-        actualRows.push([date, "支出", category, "", amount]);
-        expenseSum += amount;
-      }
-      for (const store of online.labels) {
-        const amount = online.amount(store, monthKey);
-        if (amount === "") continue;
-        actualRows.push([date, "支出", "オンライン", store, amount]);
-        onlineSum += amount;
-      }
-      if (incomeSum !== (income.amount("収入総額", monthKey) || 0) ||
-          onlineSum !== (expenses.amount("オンライン", monthKey) || 0) ||
-          expenseSum + onlineSum !== (expenses.amount("支出総額", monthKey) || 0)) {
-        throw new Error(monthKey + " の内訳と合計が一致しません。");
-      }
+    let incomeSum = 0;
+    let expenseSum = 0;
+    let onlineSum = 0;
+    for (const category of income.labels.filter(label => label !== "収入総額")) {
+      const amount = income.amount(category, monthKey);
+      if (amount === "") continue;
+      actualRows.push([date, "収入", category, "", amount]);
+      incomeSum += amount;
+    }
+    for (const category of expenses.labels.filter(label => !["オンライン", "支出総額"].includes(label))) {
+      const amount = expenses.amount(category, monthKey);
+      if (amount === "") continue;
+      actualRows.push([date, "支出", category, "", amount]);
+      expenseSum += amount;
+    }
+    for (const store of online.labels) {
+      const amount = online.amount(store, monthKey);
+      if (amount === "") continue;
+      actualRows.push([date, "支出", "オンライン", store, amount]);
+      onlineSum += amount;
+    }
+    if (incomeSum !== (income.amount("収入総額", monthKey) || 0) ||
+        onlineSum !== (expenses.amount("オンライン", monthKey) || 0) ||
+        expenseSum + onlineSum !== (expenses.amount("支出総額", monthKey) || 0)) {
+      throw new Error(monthKey + " の内訳と合計が一致しません。");
     }
 
     const input = planMigrationAppend_(spreadsheet, "月次入力",
-      ["対象月", "ユーザーID", "仮入金額", "実入金額"], 2, inputRows, timezone, year, targetMonth === undefined ? null : monthKeys[0]);
+      ["対象月", "ユーザーID", "仮入金額", "実入金額"], 2, inputRows, timezone, monthKey);
     const actuals = planMigrationAppend_(spreadsheet, "月次実績",
-      ["対象月", "区分", "カテゴリ", "内訳", "金額"], 4, actualRows, timezone, year, targetMonth === undefined ? null : monthKeys[0]);
-    const summary = {
-      year,
-      lastMonth,
-      includesCurrentMonth: currentYear === year && currentMonth === lastMonth,
-      ...(targetMonth === undefined ? {} : { targetMonth: monthKeys[0] }),
+      ["対象月", "区分", "カテゴリ", "内訳", "金額"], 4, actualRows, timezone, monthKey);
+    appendMigrationRows_(input);
+    appendMigrationRows_(actuals);
+    SpreadsheetApp.flush();
+    return {
+      targetMonth: monthKey,
       monthlyInputRows: input.rows.length,
-      monthlyActualRows: actuals.rows.length,
-      digest: Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
-        JSON.stringify([input.rows, actuals.rows])).join(",")
+      monthlyActualRows: actuals.rows.length
     };
-    if (approvedPreview || targetMonth !== undefined) {
-      if (approvedPreview && JSON.stringify(summary) !== JSON.stringify(approvedPreview)) {
-        throw new Error("転記予定が確認時から変わりました。もう一度プレビューしてください。");
-      }
-      appendMigrationRows_(input);
-      appendMigrationRows_(actuals);
-      SpreadsheetApp.flush();
-    }
-    return summary;
   } finally {
     lock.releaseLock();
   }
+}
+
+function readMonthlyMigrationSources_(spreadsheet, timezone) {
+  return [
+    readMigrationSource_(spreadsheet, SHEET_THOUBOKANRI, 7, timezone),
+    readMigrationSource_(spreadsheet, SHEET_SYUNYUKANRI, 10, timezone),
+    readMigrationSource_(spreadsheet, SHEET_SISYUTUKANRI, 28, timezone),
+    readMigrationSource_(spreadsheet, SHEET_ONLINE, 9, timezone)
+  ];
 }
 
 function readMigrationSource_(spreadsheet, name, lastRow, timezone) {
@@ -217,9 +112,6 @@ function readMigrationSource_(spreadsheet, name, lastRow, timezone) {
   return {
     labels: Array.from(rows.keys()),
     months,
-    hasData(month) {
-      return Array.from(rows.values()).some(row => Number.isFinite(row[months.get(month)]));
-    },
     amount(label, month) {
       if (!months.has(month) || !rows.has(label)) {
         throw new Error(name + "の年月または項目が見つかりません。 " + month + " " + label);
@@ -241,7 +133,7 @@ function migrationMonthKey_(value, timezone, optional = false) {
   return match[1] + "-" + match[2].padStart(2, "0");
 }
 
-function planMigrationAppend_(spreadsheet, name, headers, keyColumns, candidates, timezone, year, targetMonth) {
+function planMigrationAppend_(spreadsheet, name, headers, keyColumns, candidates, timezone, targetMonth) {
   const sheet = spreadsheet.getSheetByName(name);
   if (!sheet) throw new Error(name + "シートが見つかりません。");
   const lastRow = sheet.getLastRow();
@@ -256,9 +148,9 @@ function planMigrationAppend_(spreadsheet, name, headers, keyColumns, candidates
   values.slice(1).forEach(row => {
     if (row.every(value => value === "")) return;
     const month = migrationMonthKey_(row[0], timezone);
-    if (targetMonth ? month !== targetMonth : !month.startsWith(year + "-")) return;
+    if (month !== targetMonth) return;
     const key = keyFor(row);
-    if (existing.has(key)) throw new Error(name + "に" + year + "年の重複行があります。 " + key);
+    if (existing.has(key)) throw new Error(name + "に " + targetMonth + " の重複行があります。 " + key);
     existing.set(key, row);
   });
 
